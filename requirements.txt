@@ -1,0 +1,5 @@
+spacy
+wordfreq
+lexical-diversity
+language-tool-python
+nltk
