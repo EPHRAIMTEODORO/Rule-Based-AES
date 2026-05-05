@@ -3,3 +3,5 @@ wordfreq
 lexical-diversity
 language-tool-python
 nltk
+openpyxl
+PyMuPDF

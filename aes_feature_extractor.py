@@ -7,7 +7,11 @@ score. It does not use machine learning or LLM-based scoring.
 
 from __future__ import annotations
 
+import argparse
+import csv
+import json
 import re
+from pathlib import Path
 from typing import Optional
 
 import language_tool_python
@@ -29,7 +33,7 @@ except Exception:
     tool = None
 
 
-AWL_SET = {
+FALLBACK_AWL_SET = {
     "analyze",
     "approach",
     "area",
@@ -97,6 +101,53 @@ CONNECTIVES = {
     "as a result",
 }
 
+FEATURE_NAMES = [
+    "word_count",
+    "sentence_count",
+    "mean_sentence_length",
+    "avg_word_freq",
+    "mtld",
+    "awl_ratio",
+    "clause_density",
+    "dependency_depth",
+    "noun_complexity",
+    "connective_density",
+    "lexical_overlap",
+    "grammar_errors_per_100",
+]
+
+TEXT_COLUMN_CANDIDATES = [
+    "essay",
+    "text",
+    "text_clean",
+    "essay_text",
+    "response",
+    "answer",
+]
+RESULT_PREFIX = "aes_"
+DECIMAL_PLACES = 5
+PROJECT_DIR = Path(__file__).resolve().parent
+AWL_DATA_PATH = PROJECT_DIR / "data" / "awl_word_forms.json"
+
+
+def _load_awl_set(path: Path = AWL_DATA_PATH) -> set[str]:
+    """Load full AWL word forms from JSON, falling back to the starter list."""
+    try:
+        with path.open(encoding="utf-8") as file:
+            rows = json.load(file)
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return FALLBACK_AWL_SET
+
+    words = {
+        str(row.get("word", "")).lower()
+        for row in rows
+        if isinstance(row, dict) and row.get("word")
+    }
+    return words or FALLBACK_AWL_SET
+
+
+AWL_SET = _load_awl_set()
+
 
 def safe_divide(numerator: float, denominator: float, default: float = 0.0) -> float:
     """Divide safely and return a default when the denominator is zero."""
@@ -146,7 +197,7 @@ def _mtld(words: list[str]) -> float:
 
 
 def _awl_ratio(words: list[str]) -> float:
-    """Ratio of words that appear in the placeholder Academic Word List set."""
+    """Ratio of words that appear in the full PDF-derived AWL word-form set."""
     awl_count = sum(1 for word in words if word in AWL_SET)
     return safe_divide(awl_count, len(words))
 
@@ -257,6 +308,32 @@ def extract_features(text: str) -> dict:
     }
 
 
+def _round_result_value(value: object) -> object:
+    """Round floating-point result values for cleaner reporting."""
+    if isinstance(value, float):
+        return round(value, DECIMAL_PLACES)
+    return value
+
+
+def _round_feature_values(features: dict) -> dict:
+    """Round numeric feature values without changing feature names."""
+    return {
+        feature_name: _round_result_value(value)
+        for feature_name, value in features.items()
+    }
+
+
+def evaluate_essays(texts: list[str]) -> list[dict]:
+    """Evaluate many essays and preserve their original input order."""
+    return [
+        {
+            "essay_index": index,
+            **evaluate_essay(text),
+        }
+        for index, text in enumerate(texts, start=1)
+    ]
+
+
 def normalize(
     value: Optional[float],
     min_val: float,
@@ -283,7 +360,7 @@ def compute_score(features: dict) -> float:
         + normalize(features.get("avg_word_freq"), 2, 6, invert=True) * 0.20
         + normalize(features.get("grammar_errors_per_100"), 0, 20, invert=True) * 0.25
     )
-    return round(score * 100, 2)
+    return round(score * 100, DECIMAL_PLACES)
 
 
 def evaluate_essay(text: str) -> dict:
@@ -291,15 +368,267 @@ def evaluate_essay(text: str) -> dict:
     features = extract_features(text)
     return {
         "score": compute_score(features),
-        "features": features,
+        "features": _round_feature_values(features),
     }
 
 
-if __name__ == "__main__":
-    sample = (
-        "Students benefit from evidence-based writing instruction. "
-        "However, effective assessment also requires consistent methods, "
-        "because teachers need specific data to identify patterns in student work."
+def _result_fieldnames(prefix: str = RESULT_PREFIX) -> list[str]:
+    """Return CSV column names for generated AES results."""
+    return [
+        f"{prefix}essay_index",
+        f"{prefix}score",
+        *[f"{prefix}{feature_name}" for feature_name in FEATURE_NAMES],
+    ]
+
+
+def _flatten_result(
+    result: dict,
+    essay_index: int,
+    prefix: str = RESULT_PREFIX,
+) -> dict:
+    """Flatten a nested evaluation result into one CSV-friendly row."""
+    row = {
+        f"{prefix}essay_index": essay_index,
+        f"{prefix}score": result["score"],
+    }
+
+    for feature_name in FEATURE_NAMES:
+        row[f"{prefix}{feature_name}"] = result["features"].get(feature_name)
+
+    return row
+
+
+def _choose_text_column(
+    fieldnames: list[str],
+    text_column: Optional[str] = None,
+) -> str:
+    """Choose the essay-text column, using common names when not specified."""
+    if text_column is not None:
+        if text_column not in fieldnames:
+            raise ValueError(f"Input file does not contain text column: {text_column}")
+        return text_column
+
+    lowered_to_original = {fieldname.lower(): fieldname for fieldname in fieldnames}
+    for candidate in TEXT_COLUMN_CANDIDATES:
+        if candidate in lowered_to_original:
+            return lowered_to_original[candidate]
+
+    raise ValueError(
+        "Could not infer the essay text column. "
+        f"Use --text-column with one of: {', '.join(fieldnames)}"
     )
-    result = evaluate_essay(sample)
-    print(result)
+
+
+def _merge_original_with_result(
+    original_row: dict,
+    essay_index: int,
+    text_column: str,
+) -> dict:
+    """Evaluate one input row and return original columns plus AES columns."""
+    cleaned_row = {
+        fieldname: _cell_to_csv_value(value)
+        for fieldname, value in original_row.items()
+    }
+    essay_text = cleaned_row.get(text_column, "") or ""
+    result = evaluate_essay(str(essay_text))
+    return {
+        **cleaned_row,
+        **_flatten_result(result, essay_index),
+    }
+
+
+def _write_rows_to_csv(
+    output_path: str,
+    original_fieldnames: list[str],
+    output_rows: list[dict],
+) -> None:
+    """Write original columns followed by generated AES columns to a CSV file."""
+    fieldnames = original_fieldnames + [
+        name for name in _result_fieldnames() if name not in original_fieldnames
+    ]
+
+    with open(output_path, "w", newline="", encoding="utf-8") as output_file:
+        writer = csv.DictWriter(output_file, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(
+            {
+                fieldname: _csv_output_value(row.get(fieldname, ""))
+                for fieldname in fieldnames
+            }
+            for row in output_rows
+        )
+
+
+def _csv_output_value(value: object) -> object:
+    """Format CSV values consistently while keeping non-floats unchanged."""
+    if isinstance(value, float):
+        return f"{value:.{DECIMAL_PLACES}f}"
+    return value
+
+
+def evaluate_essays_from_csv(
+    input_path: str,
+    output_path: str,
+    text_column: Optional[str] = None,
+) -> None:
+    """Evaluate essays from a CSV file and preserve all original columns."""
+    with open(input_path, newline="", encoding="utf-8-sig") as input_file:
+        reader = csv.DictReader(input_file)
+
+        if reader.fieldnames is None:
+            raise ValueError("Input CSV must include a header row.")
+
+        original_fieldnames = list(reader.fieldnames)
+        selected_text_column = _choose_text_column(original_fieldnames, text_column)
+
+        output_rows = [
+            _merge_original_with_result(row, essay_index, selected_text_column)
+            for essay_index, row in enumerate(reader, start=1)
+        ]
+
+    _write_rows_to_csv(output_path, original_fieldnames, output_rows)
+
+
+def _cell_to_csv_value(value: object) -> object:
+    """Convert Excel cell values into CSV-friendly values."""
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return _clean_spacing_artifacts(value)
+    return value
+
+
+def _clean_spacing_artifacts(text: str) -> str:
+    """Convert hidden or mojibake non-breaking spaces into regular spaces."""
+    replacements = {
+        "\u00c2\u00a0": " ",
+        "\u00a0": " ",
+        "\u202f": " ",
+        "\u2007": " ",
+        "\ufeff": "",
+        "¬†": " ",
+    }
+
+    cleaned_text = text
+    for bad_value, replacement in replacements.items():
+        cleaned_text = cleaned_text.replace(bad_value, replacement)
+
+    return cleaned_text
+
+
+def evaluate_essays_from_xlsx(
+    input_path: str,
+    output_path: str,
+    text_column: Optional[str] = None,
+    sheet_name: Optional[str] = None,
+) -> None:
+    """Evaluate essays from an XLSX sheet and preserve all original columns."""
+    try:
+        from openpyxl import load_workbook
+    except ImportError as exc:
+        raise ImportError(
+            "Reading .xlsx files requires openpyxl. "
+            "Install it with: pip install openpyxl"
+        ) from exc
+
+    workbook = load_workbook(input_path, read_only=True, data_only=True)
+    worksheet = workbook[sheet_name] if sheet_name else workbook.worksheets[0]
+    rows = worksheet.iter_rows(values_only=True)
+
+    try:
+        header_row = next(rows)
+    except StopIteration as exc:
+        raise ValueError("Input XLSX sheet is empty.") from exc
+
+    original_fieldnames = [
+        str(value).strip() if value is not None else f"column_{index}"
+        for index, value in enumerate(header_row, start=1)
+    ]
+    selected_text_column = _choose_text_column(original_fieldnames, text_column)
+
+    output_rows = []
+    for essay_index, row_values in enumerate(rows, start=1):
+        if all(value is None for value in row_values):
+            continue
+
+        original_row = {
+            fieldname: _cell_to_csv_value(value)
+            for fieldname, value in zip(original_fieldnames, row_values)
+        }
+
+        for fieldname in original_fieldnames[len(row_values) :]:
+            original_row[fieldname] = ""
+
+        output_rows.append(
+            _merge_original_with_result(original_row, essay_index, selected_text_column)
+        )
+
+    workbook.close()
+    _write_rows_to_csv(output_path, original_fieldnames, output_rows)
+
+
+def evaluate_essays_from_file(
+    input_path: str,
+    output_path: str,
+    text_column: Optional[str] = None,
+    sheet_name: Optional[str] = None,
+) -> None:
+    """Evaluate essays from a CSV or XLSX file and write a CSV result file."""
+    suffix = Path(input_path).suffix.lower()
+
+    if suffix == ".csv":
+        evaluate_essays_from_csv(input_path, output_path, text_column)
+    elif suffix == ".xlsx":
+        evaluate_essays_from_xlsx(input_path, output_path, text_column, sheet_name)
+    else:
+        raise ValueError("Input file must be a .csv or .xlsx file.")
+
+
+def _parse_args() -> argparse.Namespace:
+    """Parse optional command-line arguments for batch file processing."""
+    parser = argparse.ArgumentParser(
+        description="Extract rule-based AES features from one essay, CSV, or XLSX file."
+    )
+    parser.add_argument(
+        "--input",
+        "-i",
+        help="Path to a CSV or XLSX file containing essays.",
+    )
+    parser.add_argument(
+        "--output",
+        "-o",
+        help="Path where the scored CSV should be written.",
+    )
+    parser.add_argument(
+        "--text-column",
+        help="Column containing essay text. If omitted, common names are inferred.",
+    )
+    parser.add_argument(
+        "--sheet",
+        help="Optional XLSX sheet name. Defaults to the first sheet.",
+    )
+    return parser.parse_args()
+
+
+if __name__ == "__main__":
+    args = _parse_args()
+
+    if args.input:
+        if not args.output:
+            raise SystemExit("Please provide --output when using --input.")
+
+        evaluate_essays_from_file(
+            input_path=args.input,
+            output_path=args.output,
+            text_column=args.text_column,
+            sheet_name=args.sheet,
+        )
+        print(f"Wrote batch results to {args.output}")
+    else:
+        sample = (
+            "Students benefit from evidence-based writing instruction. "
+            "However, effective assessment also requires consistent methods, "
+            "because teachers need specific data to identify patterns in student work."
+        )
+        result = evaluate_essay(sample)
+        print(result)
