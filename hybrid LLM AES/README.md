@@ -63,6 +63,11 @@ Llama 3 handles rubric traits that require semantic judgment:
 
 These values are output with the `llm_` prefix.
 
+The prompt includes Level 4, Level 5, and Level 6 anchor essays. Llama 3 uses
+these anchors to calibrate its rubric judgments against concrete examples of
+the expected organization, development, detail, control, and comprehensibility
+at each level.
+
 The LLM should not replace the rule-based extractor. It should add missing
 rubric information that the feature extractor cannot measure well.
 
@@ -74,6 +79,21 @@ surface-level feature.
 The LLM judges `grammar_meaning_impact`, which asks whether grammar errors
 interfere with meaning. This avoids making the LLM duplicate the exact same job
 as the rule-based grammar feature.
+
+## Rubric Anchors
+
+The LLM prompt includes three full anchor essays:
+
+- Level 4 anchor: partially organized, generally understandable, but limited in
+  cohesion and development.
+- Level 5 anchor: clearly organized with concrete support, but less controlled
+  and less abstractly developed than Level 6.
+- Level 6 anchor: clearly organized, fully developed, detailed, and easy for
+  native readers unfamiliar with learner writing to understand.
+
+These anchors are used only for calibration. The model is instructed not to copy
+anchor language into its justification and not to reward an essay just because
+it shares the same topic as an anchor.
 
 ## Expected Local Model
 
