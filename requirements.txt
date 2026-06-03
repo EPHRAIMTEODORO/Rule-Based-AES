@@ -1,7 +1,9 @@
 spacy
+setuptools<81
 wordfreq
 lexical-diversity
 language-tool-python
 nltk
 openpyxl
+pandas
 PyMuPDF

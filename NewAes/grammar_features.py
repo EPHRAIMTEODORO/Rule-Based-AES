@@ -2,6 +2,8 @@ import pandas as pd
 import re
 import language_tool_python
 import argparse
+import os
+from pathlib import Path
 
 # =========================
 # LOAD DATA
@@ -9,6 +11,7 @@ import argparse
 parser = argparse.ArgumentParser(description="Extract grammar features from an essay workbook.")
 parser.add_argument("input_file", nargs="?", default="Language Features Sample.xlsx")
 parser.add_argument("output_file", nargs="?", default="grammar_features_output.csv")
+parser.add_argument("--text-column", default="text_clean")
 args = parser.parse_args()
 
 INPUT_FILE = args.input_file
@@ -16,12 +19,20 @@ OUTPUT_FILE = args.output_file
 
 df = pd.read_excel(INPUT_FILE)
 
-# adjust this if your column name differs
-TEXT_COLUMN = "text_clean"
+TEXT_COLUMN = args.text_column
+if TEXT_COLUMN not in df.columns:
+    raise ValueError(f"Missing text column: {TEXT_COLUMN}")
 
 # =========================
 # INITIALIZE LANGUAGETOOL
 # =========================
+if os.environ.get("JAVA_HOME"):
+    os.environ["PATH"] = (
+        str(Path(os.environ["JAVA_HOME"]) / "bin")
+        + os.pathsep
+        + os.environ.get("PATH", "")
+    )
+
 tool = language_tool_python.LanguageTool("en-US")
 
 # =========================

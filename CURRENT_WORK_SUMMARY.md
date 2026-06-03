@@ -91,6 +91,9 @@ detail, prompt control, and comprehensibility.
   Level 4/5/6 anchor essays.
 - `hybrid LLM AES/evaluate_hybrid_results.py`: evaluates prediction columns
   against the human `score` column.
+- `hybrid LLM AES/validate_hybrid_model.py`: validates direct AES/LLM scores
+  and learned Ridge hybrid models with held-out and repeated cross-validation
+  checks.
 - `hybrid LLM AES/Language_Features_Sample_cleaned.xlsx`: input workbook used
   for the latest hybrid run.
 - `hybrid LLM AES/Language_Features_Sample_cleaned_hybrid_llm_results.csv`:
@@ -164,14 +167,41 @@ aes_score:              r = 0.52226, MAE = 1.03878, QWK = 0.24673
 llm_recommended_score:  r = 0.77802, MAE = 0.57317, QWK = 0.73558
 ```
 
+## Validate Results
+
+Run repeated 5-fold validation:
+
+```bash
+python3 "hybrid LLM AES/validate_hybrid_model.py" \
+  --input "hybrid LLM AES/Language_Features_Sample_cleaned_hybrid_llm_results.csv" \
+  --score-column score \
+  --prompt-column prompt_id \
+  --folds 5 \
+  --repeats 20
+```
+
+Latest ungrouped repeated 5-fold results:
+
+```text
+aes_score_scaled:          r = 0.52226, MAE = 1.03878, QWK = 0.24673
+llm_recommended_score:     r = 0.77802, MAE = 0.57317, QWK = 0.73558
+ridge_aes_features:        r = 0.73388, MAE = 0.61977, QWK = 0.69401
+ridge_llm_traits:          r = 0.76396, MAE = 0.64398, QWK = 0.72829
+ridge_aes_plus_llm_score:  r = 0.76473, MAE = 0.60533, QWK = 0.73273
+ridge_hybrid_features:     r = 0.76503, MAE = 0.61700, QWK = 0.74476
+```
+
+Prompt-grouped validation is available with `--group-column prompt_id`, but it
+should be interpreted cautiously because the current 41-essay dataset is highly
+imbalanced by prompt.
+
 ## Next Likely Steps
 
 Possible next tasks:
 
 - Rerun the full hybrid scorer after the new Level 4/5/6 anchors and compare
   metrics to the previous run.
-- Add a learned hybrid model that combines `aes_*` and `llm_*` columns.
-- Add cross-validation because the current dataset is small.
+- Improve or calibrate the learned hybrid model now that validation exists.
 - Decide whether generated result CSV files should stay in git or be treated as
   local artifacts.
 

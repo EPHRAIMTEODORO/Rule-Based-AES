@@ -10,9 +10,17 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 import re
 from pathlib import Path
 from typing import Optional
+
+if os.environ.get("JAVA_HOME"):
+    os.environ["PATH"] = (
+        str(Path(os.environ["JAVA_HOME"]) / "bin")
+        + os.pathsep
+        + os.environ.get("PATH", "")
+    )
 
 import language_tool_python
 import spacy

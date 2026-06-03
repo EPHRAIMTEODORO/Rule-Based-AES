@@ -246,6 +246,60 @@ python "hybrid LLM AES/evaluate_hybrid_results.py" \
 for evaluation. `llm_recommended_score` is already expected to be on the
 human 1-6 placement scale.
 
+## Validate Results
+
+Use the validation script to check whether the result is likely to hold up
+outside the current sample:
+
+```bash
+python "hybrid LLM AES/validate_hybrid_model.py" \
+  --input "hybrid LLM AES/Language_Features_Sample_cleaned_hybrid_llm_results.csv" \
+  --score-column score \
+  --prompt-column prompt_id \
+  --folds 5 \
+  --repeats 20
+```
+
+This prints:
+
+- full-sample metrics for direct score columns
+- one deterministic held-out train/test split
+- repeated 5-fold cross-validation for direct scores and learned Ridge models
+
+For a stricter prompt-transfer check, keep essays from the same prompt together
+in validation folds:
+
+```bash
+python "hybrid LLM AES/validate_hybrid_model.py" \
+  --input "hybrid LLM AES/Language_Features_Sample_cleaned_hybrid_llm_results.csv" \
+  --score-column score \
+  --prompt-column prompt_id \
+  --group-column prompt_id \
+  --folds 5 \
+  --repeats 20
+```
+
+Interpret grouped prompt validation cautiously in the current dataset because
+the prompts are highly imbalanced: most essays are from `Reducing Stress`, while
+some prompts have only one essay.
+
+Validation model names:
+
+- `aes_score_scaled`: rule-based `aes_score`, converted from 0-100 into the
+  human 1-6 score range.
+- `llm_recommended_score`: direct Llama 3 score on the human 1-6 scale.
+- `ridge_aes_features`: learned Ridge regression using only `aes_*` feature
+  columns, excluding the final `aes_score`.
+- `ridge_llm_traits`: learned Ridge regression using LLM rubric trait columns,
+  excluding `llm_recommended_score` and `llm_justification`.
+- `ridge_aes_plus_llm_score`: learned Ridge regression using rule-based
+  `aes_*` feature columns plus `llm_recommended_score`.
+- `ridge_hybrid_features`: learned Ridge regression using both rule-based
+  `aes_*` features and LLM rubric trait columns.
+
+The Ridge implementation is intentionally standard-library only, so the script
+does not require scikit-learn.
+
 ## Research Evaluation Plan
 
 After generating LLM features, compare three systems against the human score:
