@@ -1,0 +1,1607 @@
+<div id="hitl-app">
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: light-dark(#f6f7f9, #17191c);
+      --panel: light-dark(#ffffff, #22252a);
+      --panel-soft: light-dark(#eef2f6, #2b3036);
+      --panel-muted: light-dark(#f8fafc, #1d2024);
+      --text: light-dark(#18202a, #f3f6f9);
+      --muted: light-dark(#667085, #a8b1bd);
+      --line: light-dark(#d8dee7, #3b424b);
+      --accent: light-dark(#0f766e, #22c7b8);
+      --accent-strong: light-dark(#0b5f59, #5eead4);
+      --ink: light-dark(#243447, #e8edf4);
+      --danger: light-dark(#b42318, #ff928a);
+      --warning: light-dark(#b54708, #f5c451);
+      --ok: light-dark(#067647, #65d58a);
+      --review: light-dark(#6941c6, #b69cff);
+      --shadow: light-dark(0 12px 28px rgba(16, 24, 40, 0.08), none);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    #hitl-app {
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      letter-spacing: 0;
+    }
+
+    .app-shell {
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: auto auto 1fr;
+    }
+
+    .topbar {
+      min-height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 14px 24px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel);
+    }
+
+    .brand {
+      display: grid;
+      gap: 2px;
+      min-width: 0;
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-size: 18px;
+      line-height: 1.2;
+      font-weight: 750;
+    }
+
+    .brand span {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .server-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 36px;
+      padding: 6px 10px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      color: var(--muted);
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--warning);
+    }
+
+    .dot.ready {
+      background: var(--ok);
+    }
+
+    .dot.failed {
+      background: var(--danger);
+    }
+
+    .setup-band {
+      display: grid;
+      grid-template-columns: minmax(320px, 1.1fr) minmax(360px, 1.4fr) minmax(260px, 0.9fr);
+      gap: 14px;
+      padding: 14px 24px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel-muted);
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+    }
+
+    .upload-panel,
+    .status-panel,
+    .readiness-panel {
+      padding: 14px;
+      display: grid;
+      gap: 12px;
+      align-content: start;
+    }
+
+    .panel-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      min-height: 28px;
+    }
+
+    .panel-heading h2 {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 750;
+    }
+
+    .muted {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .field {
+      display: grid;
+      gap: 6px;
+    }
+
+    label {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    input,
+    select,
+    textarea {
+      width: 100%;
+      min-height: 36px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--panel);
+      color: var(--text);
+      padding: 8px 10px;
+      font: inherit;
+      font-size: 14px;
+    }
+
+    textarea {
+      min-height: 118px;
+      resize: vertical;
+      line-height: 1.45;
+    }
+
+    input[type="file"] {
+      padding: 7px;
+      background: var(--panel-soft);
+    }
+
+    .field-row {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .button-row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    button,
+    .download-link {
+      min-height: 36px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      padding: 8px 12px;
+      background: var(--accent);
+      color: #ffffff;
+      font: inherit;
+      font-size: 14px;
+      font-weight: 750;
+      text-decoration: none;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    button.secondary,
+    .download-link.secondary {
+      border-color: var(--line);
+      background: var(--panel);
+      color: var(--text);
+    }
+
+    button:disabled,
+    .download-link.disabled {
+      cursor: not-allowed;
+      opacity: 0.55;
+    }
+
+    .progress-track {
+      height: 10px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: var(--panel-soft);
+      border: 1px solid var(--line);
+    }
+
+    .progress-fill {
+      height: 100%;
+      width: 0;
+      background: var(--accent);
+      transition: width 180ms ease;
+    }
+
+    .message {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.45;
+      min-height: 20px;
+    }
+
+    .message.error {
+      color: var(--danger);
+      font-weight: 700;
+    }
+
+    .status-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .stat-tile {
+      min-height: 70px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-soft);
+      display: grid;
+      align-content: center;
+      gap: 4px;
+    }
+
+    .stat-tile span {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 750;
+      text-transform: uppercase;
+    }
+
+    .stat-tile strong {
+      font-size: 20px;
+      line-height: 1.1;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .readiness-list {
+      overflow: auto;
+      max-height: 132px;
+      display: grid;
+      gap: 6px;
+    }
+
+    .check-row {
+      display: grid;
+      grid-template-columns: 18px 1fr;
+      gap: 8px;
+      align-items: start;
+      padding: 6px 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .check-row:last-child {
+      border-bottom: none;
+    }
+
+    .check-icon {
+      width: 10px;
+      height: 10px;
+      margin-top: 5px;
+      border-radius: 999px;
+      background: var(--danger);
+    }
+
+    .check-icon.ok {
+      background: var(--ok);
+    }
+
+    .check-copy strong {
+      display: block;
+      font-size: 13px;
+      line-height: 1.3;
+    }
+
+    .check-copy span {
+      display: block;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+
+    .review-shell {
+      min-width: 0;
+      padding: 18px 24px 24px;
+      display: grid;
+      gap: 16px;
+    }
+
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .dashboard-card {
+      min-height: 84px;
+      padding: 14px;
+      display: grid;
+      align-content: center;
+      gap: 6px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+
+    .dashboard-card span {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 750;
+      text-transform: uppercase;
+    }
+
+    .dashboard-card strong {
+      font-size: 24px;
+      line-height: 1.05;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .review-layout {
+      min-width: 0;
+      display: grid;
+      grid-template-columns: minmax(220px, 280px) minmax(420px, 1fr) minmax(320px, 380px);
+      gap: 16px;
+      align-items: start;
+    }
+
+    .queue-panel {
+      position: sticky;
+      top: 16px;
+      padding: 14px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .queue-controls {
+      display: grid;
+      gap: 8px;
+    }
+
+    .nav-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 26px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: var(--panel-soft);
+      border: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 750;
+      white-space: nowrap;
+    }
+
+    .status-badge.finalized {
+      color: var(--ok);
+      border-color: color-mix(in srgb, var(--ok) 45%, var(--line));
+    }
+
+    .status-badge.review {
+      color: var(--review);
+      border-color: color-mix(in srgb, var(--review) 45%, var(--line));
+    }
+
+    .essay-panel {
+      min-width: 0;
+      display: grid;
+      gap: 14px;
+    }
+
+    .essay-header {
+      padding: 16px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .essay-title-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 14px;
+    }
+
+    .essay-title {
+      display: grid;
+      gap: 4px;
+      min-width: 0;
+    }
+
+    .essay-title h2 {
+      margin: 0;
+      font-size: 20px;
+      line-height: 1.2;
+    }
+
+    .prompt-text {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.45;
+    }
+
+    .score-pair {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .evidence-grid {
+      display: grid;
+      grid-template-columns: minmax(230px, 0.7fr) minmax(360px, 1.3fr);
+      gap: 10px;
+      align-items: stretch;
+    }
+
+    .indicator-panel {
+      min-height: 100%;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-soft);
+      display: grid;
+      gap: 10px;
+    }
+
+    .indicator-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .indicator-title span {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 750;
+      text-transform: uppercase;
+    }
+
+    .score-box {
+      min-height: 78px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-soft);
+      display: grid;
+      align-content: center;
+      gap: 6px;
+    }
+
+    .score-box span {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 750;
+      text-transform: uppercase;
+    }
+
+    .score-box strong {
+      font-size: 26px;
+      line-height: 1;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .score-box.low,
+    .trait-item.low,
+    .metric-item.low,
+    .signal-check.low {
+      border-color: color-mix(in srgb, var(--danger) 45%, var(--line));
+    }
+
+    .score-box.mid,
+    .trait-item.mid,
+    .metric-item.mid,
+    .signal-check.mid {
+      border-color: color-mix(in srgb, var(--warning) 45%, var(--line));
+    }
+
+    .score-box.high,
+    .trait-item.high,
+    .metric-item.high,
+    .signal-check.high {
+      border-color: color-mix(in srgb, var(--ok) 45%, var(--line));
+    }
+
+    .band-pill {
+      width: fit-content;
+      min-height: 24px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 4px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 750;
+      white-space: nowrap;
+    }
+
+    .band-pill.low {
+      color: var(--danger);
+      border-color: color-mix(in srgb, var(--danger) 45%, var(--line));
+    }
+
+    .band-pill.mid {
+      color: var(--warning);
+      border-color: color-mix(in srgb, var(--warning) 45%, var(--line));
+    }
+
+    .band-pill.high {
+      color: var(--ok);
+      border-color: color-mix(in srgb, var(--ok) 45%, var(--line));
+    }
+
+    .signal-check {
+      min-height: 40px;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-soft);
+      color: var(--ink);
+      font-size: 14px;
+      line-height: 1.45;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .essay-body {
+      padding: 18px;
+      max-height: 52vh;
+      overflow: auto;
+      line-height: 1.7;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .section-block {
+      padding: 16px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .section-block h3 {
+      margin: 0;
+      font-size: 15px;
+      line-height: 1.2;
+    }
+
+    .trait-grid,
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .metric-grid.compact {
+      grid-template-columns: repeat(5, minmax(86px, 1fr));
+      gap: 8px;
+    }
+
+    .trait-item,
+    .metric-item {
+      min-height: 64px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-soft);
+      display: grid;
+      align-content: center;
+      gap: 4px;
+    }
+
+    .metric-grid.compact .metric-item {
+      min-height: 78px;
+      padding: 8px;
+    }
+
+    .trait-item span,
+    .metric-item span {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 750;
+      text-transform: uppercase;
+    }
+
+    .trait-item strong,
+    .metric-item strong {
+      font-size: 18px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .metric-grid.compact .metric-item strong {
+      font-size: 16px;
+    }
+
+    .justification {
+      color: var(--ink);
+      line-height: 1.6;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .decision-panel {
+      position: sticky;
+      top: 16px;
+      padding: 16px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .decision-panel h2 {
+      margin: 0;
+      font-size: 16px;
+    }
+
+    .decision-grid {
+      display: grid;
+      gap: 10px;
+    }
+
+    .save-decision {
+      width: 100%;
+      min-height: 40px;
+    }
+
+    .empty-state {
+      min-height: 320px;
+      display: grid;
+      place-items: center;
+      color: var(--muted);
+      font-size: 14px;
+      text-align: center;
+      padding: 24px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    @media (max-width: 1180px) {
+      .setup-band,
+      .review-layout {
+        grid-template-columns: 1fr;
+      }
+
+      .queue-panel,
+      .decision-panel {
+        position: static;
+      }
+
+      .review-layout {
+        gap: 12px;
+      }
+    }
+
+    @media (max-width: 760px) {
+      .topbar {
+        align-items: flex-start;
+        flex-direction: column;
+        padding: 14px;
+      }
+
+      .top-actions {
+        width: 100%;
+        justify-content: stretch;
+      }
+
+      .download-link,
+      .server-pill {
+        width: 100%;
+      }
+
+      .setup-band,
+      .review-shell {
+        padding: 12px;
+      }
+
+      .field-row,
+      .status-grid,
+      .dashboard-grid,
+      .score-pair,
+      .trait-grid,
+      .metric-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .essay-title-row {
+        flex-direction: column;
+      }
+    }
+  </style>
+
+  <main class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <h1>HITL Academic Writing Scorer</h1>
+        <span>Local review dashboard</span>
+      </div>
+      <div class="top-actions">
+        <a id="download-link" class="download-link secondary disabled hidden" href="#">Download Workbook</a>
+        <div class="server-pill" aria-live="polite">
+          <span id="server-dot" class="dot"></span>
+          <span id="server-status">Checking server</span>
+        </div>
+      </div>
+    </header>
+
+    <section class="setup-band" aria-label="Workbook processing">
+      <form id="upload-form" class="panel upload-panel">
+        <div class="panel-heading">
+          <h2>Workbook</h2>
+        </div>
+        <div class="field">
+          <label for="workbook-file">Upload</label>
+          <input id="workbook-file" name="file" type="file" accept=".xlsx" required>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="essay-id-column">ID</label>
+            <input id="essay-id-column" name="essay_id_column" value="id" autocomplete="off">
+          </div>
+          <div class="field">
+            <label for="prompt-column">Prompt</label>
+            <input id="prompt-column" name="prompt_column" value="Topic" autocomplete="off">
+          </div>
+          <div class="field">
+            <label for="text-column">Essay</label>
+            <input id="text-column" name="text_column" value="Essay" autocomplete="off">
+          </div>
+        </div>
+        <div class="button-row">
+          <button id="start-button" type="submit">Process</button>
+          <button id="sample-button" class="secondary" type="button">Sample</button>
+        </div>
+      </form>
+
+      <section class="panel status-panel" aria-label="Job status">
+        <div class="panel-heading">
+          <h2>Processing</h2>
+          <span id="job-id" class="muted">No job</span>
+        </div>
+        <div class="progress-track" aria-hidden="true">
+          <div id="progress-fill" class="progress-fill"></div>
+        </div>
+        <div id="message" class="message">Ready</div>
+        <div class="status-grid">
+          <div class="stat-tile">
+            <span>Status</span>
+            <strong id="summary-status">Idle</strong>
+          </div>
+          <div class="stat-tile">
+            <span>Essays</span>
+            <strong id="summary-rows">0</strong>
+          </div>
+          <div class="stat-tile">
+            <span>Fields</span>
+            <strong id="summary-columns">0</strong>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel readiness-panel" aria-label="Readiness">
+        <div class="panel-heading">
+          <h2>Readiness</h2>
+          <span id="readiness-summary" class="muted">Checking</span>
+        </div>
+        <div id="readiness-list" class="readiness-list"></div>
+      </section>
+    </section>
+
+    <section class="review-shell">
+      <div id="empty-state" class="empty-state">No completed review set</div>
+
+      <div id="review-dashboard" class="hidden">
+        <div class="dashboard-grid" aria-label="Review summary">
+          <div class="dashboard-card">
+            <span>Total Essays</span>
+            <strong id="dash-total">0</strong>
+          </div>
+          <div class="dashboard-card">
+            <span>Pending</span>
+            <strong id="dash-pending">0</strong>
+          </div>
+          <div class="dashboard-card">
+            <span>Review</span>
+            <strong id="dash-review">0</strong>
+          </div>
+          <div class="dashboard-card">
+            <span>Finalized</span>
+            <strong id="dash-finalized">0</strong>
+          </div>
+        </div>
+
+        <div class="review-layout">
+          <aside class="panel queue-panel" aria-label="Essay navigation">
+            <div class="panel-heading">
+              <h2>Essay Queue</h2>
+              <span id="essay-position" class="muted">0 of 0</span>
+            </div>
+            <div class="queue-controls">
+              <div class="field">
+                <label for="essay-selector">Essay</label>
+                <select id="essay-selector"></select>
+              </div>
+              <div class="nav-row">
+                <button id="prev-essay" class="secondary" type="button">Previous</button>
+                <button id="next-essay" class="secondary" type="button">Next</button>
+              </div>
+            </div>
+            <div>
+              <span id="current-status-badge" class="status-badge">Pending</span>
+            </div>
+            <div id="current-updated" class="muted"></div>
+          </aside>
+
+          <article class="essay-panel" aria-label="Essay review">
+            <section class="panel essay-header">
+              <div class="essay-title-row">
+                <div class="essay-title">
+                  <h2 id="essay-title">Essay</h2>
+                  <div id="essay-prompt" class="prompt-text"></div>
+                </div>
+                <span id="attention-badge" class="status-badge hidden"></span>
+              </div>
+              <div class="evidence-grid">
+                <div>
+                  <div class="score-pair">
+                    <div id="model-score-box" class="score-box">
+                      <span>Model Score</span>
+                      <strong id="model-score">-</strong>
+                      <div id="model-score-band" class="band-pill">Not scored</div>
+                    </div>
+                    <div id="final-score-box" class="score-box">
+                      <span>Final Score</span>
+                      <strong id="final-score-display">Pending</strong>
+                      <div id="final-score-band" class="band-pill">Pending</div>
+                    </div>
+                  </div>
+                  <div id="signal-check" class="signal-check">
+                    <span>Signals waiting for completed scoring</span>
+                    <span id="indicator-band" class="band-pill">Pending</span>
+                  </div>
+                </div>
+                <div class="indicator-panel">
+                  <div class="indicator-title">
+                    <span>Writing Indicators</span>
+                  </div>
+                  <div id="metric-grid" class="metric-grid compact"></div>
+                </div>
+              </div>
+            </section>
+
+            <section class="panel">
+              <div id="essay-text" class="essay-body"></div>
+            </section>
+
+            <section class="panel section-block">
+              <h3>Model Evaluation</h3>
+              <div id="trait-grid" class="trait-grid"></div>
+              <div id="llm-justification" class="justification"></div>
+            </section>
+
+          </article>
+
+          <aside class="panel decision-panel" aria-label="Human decision">
+            <div class="panel-heading">
+              <h2>Human Decision</h2>
+            </div>
+            <div class="decision-grid">
+              <div class="field">
+                <label for="rater-final-score">Final Score</label>
+                <select id="rater-final-score"></select>
+              </div>
+              <div class="field">
+                <label for="rater-final-placement">Placement</label>
+                <select id="rater-final-placement"></select>
+              </div>
+              <div class="field">
+                <label for="rater-action">Action</label>
+                <select id="rater-action"></select>
+              </div>
+              <div class="field">
+                <label for="decision-status">Status</label>
+                <select id="decision-status"></select>
+              </div>
+              <div class="field">
+                <label for="admissions-decision">Admissions</label>
+                <select id="admissions-decision"></select>
+              </div>
+              <div class="field">
+                <label for="reason-notes">Notes</label>
+                <textarea id="reason-notes"></textarea>
+              </div>
+              <button id="save-decision" class="save-decision" type="button">Save Decision</button>
+            </div>
+          </aside>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    (() => {
+      const apiBase = window.location.origin;
+      const form = document.getElementById("upload-form");
+      const fileInput = document.getElementById("workbook-file");
+      const startButton = document.getElementById("start-button");
+      const sampleButton = document.getElementById("sample-button");
+      const serverDot = document.getElementById("server-dot");
+      const serverStatus = document.getElementById("server-status");
+      const jobIdText = document.getElementById("job-id");
+      const progressFill = document.getElementById("progress-fill");
+      const message = document.getElementById("message");
+      const summaryStatus = document.getElementById("summary-status");
+      const summaryRows = document.getElementById("summary-rows");
+      const summaryColumns = document.getElementById("summary-columns");
+      const downloadLink = document.getElementById("download-link");
+      const emptyState = document.getElementById("empty-state");
+      const reviewDashboard = document.getElementById("review-dashboard");
+      const dashTotal = document.getElementById("dash-total");
+      const dashPending = document.getElementById("dash-pending");
+      const dashReview = document.getElementById("dash-review");
+      const dashFinalized = document.getElementById("dash-finalized");
+      const essaySelector = document.getElementById("essay-selector");
+      const prevEssayButton = document.getElementById("prev-essay");
+      const nextEssayButton = document.getElementById("next-essay");
+      const essayPosition = document.getElementById("essay-position");
+      const currentStatusBadge = document.getElementById("current-status-badge");
+      const currentUpdated = document.getElementById("current-updated");
+      const essayTitle = document.getElementById("essay-title");
+      const essayPrompt = document.getElementById("essay-prompt");
+      const attentionBadge = document.getElementById("attention-badge");
+      const modelScoreBox = document.getElementById("model-score-box");
+      const modelScore = document.getElementById("model-score");
+      const modelScoreBand = document.getElementById("model-score-band");
+      const finalScoreBox = document.getElementById("final-score-box");
+      const finalScoreDisplay = document.getElementById("final-score-display");
+      const finalScoreBand = document.getElementById("final-score-band");
+      const signalCheck = document.getElementById("signal-check");
+      const indicatorBand = document.getElementById("indicator-band");
+      const essayText = document.getElementById("essay-text");
+      const traitGrid = document.getElementById("trait-grid");
+      const llmJustification = document.getElementById("llm-justification");
+      const metricGrid = document.getElementById("metric-grid");
+      const readinessSummary = document.getElementById("readiness-summary");
+      const readinessList = document.getElementById("readiness-list");
+      const finalScoreControl = document.getElementById("rater-final-score");
+      const finalPlacementControl = document.getElementById("rater-final-placement");
+      const raterActionControl = document.getElementById("rater-action");
+      const decisionStatusControl = document.getElementById("decision-status");
+      const admissionsDecisionControl = document.getElementById("admissions-decision");
+      const reasonNotesControl = document.getElementById("reason-notes");
+      const saveDecisionButton = document.getElementById("save-decision");
+
+      let pollTimer = null;
+      let currentJob = null;
+      let currentResult = null;
+      let currentEssayIndex = 0;
+
+      const scoreOptions = ["", "1", "1.5", "2", "2.5", "3", "3.5", "4", "4.5", "5", "5.5", "6"];
+      const placementOptions = ["", "Pre-EIL", "Advanced I", "Advanced II", "Post EIL"];
+      const actionOptions = ["", "Accept system score", "Override score", "Needs second review", "Request follow-up"];
+      const statusOptions = ["Pending", "Finalized", "Review"];
+      const admissionsOptions = ["", "Auto-confirmed", "Requires follow-up", "Hold"];
+
+      const traitFields = [
+        ["Organization", "LLM_Organization_Coherence"],
+        ["Support", "LLM_Supporting_Detail"],
+        ["Development", "LLM_Paragraph_Development"],
+        ["Comprehension", "LLM_Comprehensibility"],
+        ["Prompt", "LLM_Prompt_Fulfillment"]
+      ];
+
+      const metricFields = [
+        ["Word Count", "Word_Count"],
+        ["Sentence Count", "Sentence_Count"],
+        ["Grammar Errors per 100 Words", "Grammar_Errors_per_100"],
+        ["Vocabulary Variety", "Type_Token_Ratio"],
+        ["Academic Word Use", "AWL_Ratio"]
+      ];
+
+      function fillSelect(select, values) {
+        select.replaceChildren();
+        values.forEach((value) => {
+          const option = document.createElement("option");
+          option.value = value;
+          option.textContent = value || "Choose";
+          select.appendChild(option);
+        });
+      }
+
+      fillSelect(finalScoreControl, scoreOptions);
+      fillSelect(finalPlacementControl, placementOptions);
+      fillSelect(raterActionControl, actionOptions);
+      fillSelect(decisionStatusControl, statusOptions);
+      fillSelect(admissionsDecisionControl, admissionsOptions);
+
+      function setMessage(text, isError = false) {
+        message.textContent = text;
+        message.classList.toggle("error", isError);
+      }
+
+      function setBusy(isBusy) {
+        startButton.disabled = isBusy;
+        sampleButton.disabled = isBusy;
+      }
+
+      function displayValue(value, fallback = "-") {
+        if (value === null || value === undefined || value === "") {
+          return fallback;
+        }
+        return String(value);
+      }
+
+      function getRecordValue(record, names, fallback = "") {
+        for (const name of names) {
+          if (record[name] !== null && record[name] !== undefined && record[name] !== "") {
+            return record[name];
+          }
+        }
+        return fallback;
+      }
+
+      function getRecords() {
+        return currentResult && Array.isArray(currentResult.records) ? currentResult.records : [];
+      }
+
+      function normalizedStatus(record) {
+        return displayValue(record.Decision_Status, "Pending");
+      }
+
+      function numericValue(value) {
+        const number = Number(value);
+        return Number.isFinite(number) ? number : null;
+      }
+
+      function makeBand(label, tone, rank) {
+        return { label, tone, rank };
+      }
+
+      function scoreBand(value) {
+        const score = numericValue(value);
+        if (score === null) {
+          return makeBand("Not scored", "", 0);
+        }
+        if (score <= 2.5) {
+          return makeBand("Low", "low", 1);
+        }
+        if (score <= 4) {
+          return makeBand("Developing", "mid", 2);
+        }
+        return makeBand("Strong", "high", 3);
+      }
+
+      function metricBand(field, value) {
+        const number = numericValue(value);
+        if (number === null) {
+          return makeBand("No signal", "", 0);
+        }
+        if (field === "Grammar_Errors_per_100") {
+          if (number <= 3) {
+            return makeBand("Clean", "high", 3);
+          }
+          if (number <= 7) {
+            return makeBand("Some Errors", "mid", 2);
+          }
+          return makeBand("Many Errors", "low", 1);
+        }
+        if (field === "Word_Count") {
+          if (number >= 300) {
+            return makeBand("Strong", "high", 3);
+          }
+          if (number >= 150) {
+            return makeBand("Developing", "mid", 2);
+          }
+          return makeBand("Low", "low", 1);
+        }
+        if (field === "Sentence_Count") {
+          if (number >= 15) {
+            return makeBand("Strong", "high", 3);
+          }
+          if (number >= 8) {
+            return makeBand("Developing", "mid", 2);
+          }
+          return makeBand("Low", "low", 1);
+        }
+        if (field === "Type_Token_Ratio") {
+          if (number >= 0.5) {
+            return makeBand("Strong", "high", 3);
+          }
+          if (number >= 0.35) {
+            return makeBand("Developing", "mid", 2);
+          }
+          return makeBand("Low", "low", 1);
+        }
+        if (field === "AWL_Ratio") {
+          const ratio = number > 1 ? number / 100 : number;
+          if (ratio >= 0.08) {
+            return makeBand("Strong", "high", 3);
+          }
+          if (ratio >= 0.04) {
+            return makeBand("Developing", "mid", 2);
+          }
+          return makeBand("Low", "low", 1);
+        }
+        return makeBand("Measured", "", 0);
+      }
+
+      function indicatorCompositeBand(record) {
+        const bands = metricFields
+          .map(([, field]) => metricBand(field, record[field]))
+          .filter((band) => band.rank > 0);
+        if (!bands.length) {
+          return makeBand("No writing signals", "", 0);
+        }
+        const average = bands.reduce((total, band) => total + band.rank, 0) / bands.length;
+        if (average >= 2.6) {
+          return makeBand("Strong writing signals", "high", 3);
+        }
+        if (average >= 1.7) {
+          return makeBand("Developing writing signals", "mid", 2);
+        }
+        return makeBand("Low writing signals", "low", 1);
+      }
+
+      function applyBand(element, band, baseClass) {
+        element.className = `${baseClass}${band.tone ? ` ${band.tone}` : ""}`;
+      }
+
+      function updateBandPill(element, band) {
+        element.textContent = band.label;
+        element.className = `band-pill${band.tone ? ` ${band.tone}` : ""}`;
+      }
+
+      function updateProgress(statusPayload) {
+        const status = statusPayload.status || "idle";
+        const progress = statusPayload.progress || {};
+        const current = Number(progress.current || 0);
+        const total = Number(progress.total || 0);
+        const percent = total > 0 ? Math.round((current / total) * 100) : status === "completed" ? 100 : status === "running" ? 12 : 0;
+
+        jobIdText.textContent = statusPayload.job_id ? statusPayload.job_id.slice(0, 8) : "No job";
+        summaryStatus.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+        summaryRows.textContent = String(progress.rows_processed || current || 0);
+        progressFill.style.width = `${percent}%`;
+        setMessage(progress.message || status, status === "failed");
+      }
+
+      function updateDashboardCounts() {
+        const records = getRecords();
+        let pending = 0;
+        let review = 0;
+        let finalized = 0;
+        records.forEach((record) => {
+          const status = normalizedStatus(record).toLowerCase();
+          if (status === "finalized") {
+            finalized += 1;
+          } else if (status === "review") {
+            review += 1;
+          } else {
+            pending += 1;
+          }
+        });
+        dashTotal.textContent = String(records.length);
+        dashPending.textContent = String(pending);
+        dashReview.textContent = String(review);
+        dashFinalized.textContent = String(finalized);
+      }
+
+      function updateEssaySelector() {
+        const records = getRecords();
+        essaySelector.replaceChildren();
+        records.forEach((record, index) => {
+          const option = document.createElement("option");
+          const essayId = getRecordValue(record, ["Essay_ID", "id", "essay_id"], `Row ${index + 1}`);
+          option.value = String(index);
+          option.textContent = `${index + 1}. ${essayId} - ${normalizedStatus(record)}`;
+          essaySelector.appendChild(option);
+        });
+        essaySelector.value = String(currentEssayIndex);
+      }
+
+      function renderFieldGrid(container, record, fields) {
+        container.replaceChildren();
+        fields.forEach(([label, field]) => {
+          const isTrait = field.startsWith("LLM_");
+          const band = isTrait ? scoreBand(record[field]) : metricBand(field, record[field]);
+          const item = document.createElement("div");
+          item.className = `${isTrait ? "trait-item" : "metric-item"}${band.tone ? ` ${band.tone}` : ""}`;
+          const title = document.createElement("span");
+          title.textContent = label;
+          const value = document.createElement("strong");
+          value.textContent = displayValue(record[field]);
+          const pill = document.createElement("div");
+          pill.className = `band-pill${band.tone ? ` ${band.tone}` : ""}`;
+          pill.textContent = band.label;
+          item.append(title, value, pill);
+          container.appendChild(item);
+        });
+      }
+
+      function statusClass(status) {
+        const value = status.toLowerCase();
+        if (value === "finalized") {
+          return " finalized";
+        }
+        if (value === "review") {
+          return " review";
+        }
+        return "";
+      }
+
+      function signalMessage(modelBand, writingBand) {
+        if (!modelBand.rank || !writingBand.rank) {
+          return "Signals will appear after scoring is complete";
+        }
+        if (modelBand.rank <= 1 && writingBand.rank >= 3) {
+          return "Check mismatch: model score is low, but writing indicators look strong";
+        }
+        if (modelBand.rank >= 3 && writingBand.rank <= 1) {
+          return "Check mismatch: model score is strong, but writing indicators look low";
+        }
+        if (Math.abs(modelBand.rank - writingBand.rank) >= 2) {
+          return "Check mismatch between model score and writing indicators";
+        }
+        return "Model score and writing indicators look aligned";
+      }
+
+      function setSelectValue(select, value) {
+        select.value = String(value || "");
+        if (select.value !== String(value || "")) {
+          select.value = "";
+        }
+      }
+
+      function renderCurrentEssay() {
+        const records = getRecords();
+        if (!records.length) {
+          reviewDashboard.classList.add("hidden");
+          emptyState.classList.remove("hidden");
+          return;
+        }
+
+        currentEssayIndex = Math.min(Math.max(currentEssayIndex, 0), records.length - 1);
+        const record = records[currentEssayIndex];
+        const essayId = getRecordValue(record, ["Essay_ID", "id", "essay_id"], `Row ${currentEssayIndex + 1}`);
+        const prompt = getRecordValue(record, ["Topic", "prompt", "prompt_id"], "");
+        const text = getRecordValue(record, ["Essay_Text", "Essay", "text_clean"], "");
+        const status = normalizedStatus(record);
+        const attention = getRecordValue(record, ["Attention_Flag", "attention_flag", "Profile_Attention_Flag"], "");
+
+        updateDashboardCounts();
+        updateEssaySelector();
+        essayPosition.textContent = `${currentEssayIndex + 1} of ${records.length}`;
+        prevEssayButton.disabled = currentEssayIndex === 0;
+        nextEssayButton.disabled = currentEssayIndex >= records.length - 1;
+
+        currentStatusBadge.textContent = status;
+        currentStatusBadge.className = `status-badge${statusClass(status)}`;
+        currentUpdated.textContent = record.Decision_Updated_At ? `Updated ${record.Decision_Updated_At}` : "";
+
+        essayTitle.textContent = `Essay ${essayId}`;
+        essayPrompt.textContent = prompt ? `Prompt: ${prompt}` : "";
+        modelScore.textContent = displayValue(record.llm_recommended_score);
+        finalScoreDisplay.textContent = displayValue(record.Rater_Final_Score, "Pending");
+        essayText.textContent = text || "Essay text unavailable";
+
+        const modelBand = scoreBand(record.llm_recommended_score);
+        const finalBand = scoreBand(record.Rater_Final_Score);
+        const writingBand = indicatorCompositeBand(record);
+        applyBand(modelScoreBox, modelBand, "score-box");
+        applyBand(finalScoreBox, finalBand, "score-box");
+        updateBandPill(modelScoreBand, modelBand);
+        updateBandPill(finalScoreBand, record.Rater_Final_Score ? finalBand : makeBand("Pending", "", 0));
+        updateBandPill(indicatorBand, writingBand);
+        signalCheck.firstElementChild.textContent = signalMessage(modelBand, writingBand);
+        applyBand(signalCheck, writingBand, "signal-check");
+
+        attentionBadge.classList.toggle("hidden", !attention);
+        attentionBadge.textContent = attention;
+
+        renderFieldGrid(traitGrid, record, traitFields);
+        renderFieldGrid(metricGrid, record, metricFields);
+        llmJustification.textContent = displayValue(record.llm_justification, "No model justification available.");
+
+        setSelectValue(finalScoreControl, record.Rater_Final_Score);
+        setSelectValue(finalPlacementControl, record.Rater_Final_Placement);
+        setSelectValue(raterActionControl, record.Rater_Action);
+        setSelectValue(decisionStatusControl, record.Decision_Status || "Pending");
+        setSelectValue(admissionsDecisionControl, record.Admissions_Decision);
+        reasonNotesControl.value = String(record.Reason_Notes || "");
+
+        emptyState.classList.add("hidden");
+        reviewDashboard.classList.remove("hidden");
+      }
+
+      function renderRecords(result) {
+        currentResult = result;
+        currentEssayIndex = 0;
+        const records = getRecords();
+        summaryRows.textContent = String(result.rows_processed || records.length);
+        summaryColumns.textContent = String(result.columns ? result.columns.length : 0);
+        renderCurrentEssay();
+      }
+
+      async function requestJson(url, options = {}) {
+        const response = await fetch(url, options);
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error || `Request failed with ${response.status}`);
+        }
+        return payload;
+      }
+
+      async function checkHealth() {
+        try {
+          await requestJson(`${apiBase}/health`);
+          serverDot.classList.add("ready");
+          serverDot.classList.remove("failed");
+          serverStatus.textContent = "Server ready";
+        } catch (error) {
+          serverDot.classList.remove("ready");
+          serverDot.classList.add("failed");
+          serverStatus.textContent = "Server unavailable";
+          setMessage(error.message, true);
+        }
+      }
+
+      function renderPreflight(result) {
+        const summary = result.summary || {};
+        readinessSummary.textContent = result.ready
+          ? `Ready ${summary.passed || 0}/${summary.total || 0}`
+          : `Needs setup ${summary.passed || 0}/${summary.total || 0}`;
+        readinessList.replaceChildren();
+
+        (result.checks || []).forEach((check) => {
+          const row = document.createElement("div");
+          row.className = "check-row";
+
+          const icon = document.createElement("span");
+          icon.className = `check-icon${check.ok ? " ok" : ""}`;
+
+          const copy = document.createElement("div");
+          copy.className = "check-copy";
+
+          const title = document.createElement("strong");
+          title.textContent = check.message || check.name;
+
+          const detail = document.createElement("span");
+          detail.textContent = check.name;
+
+          copy.append(title, detail);
+          row.append(icon, copy);
+          readinessList.appendChild(row);
+        });
+      }
+
+      async function checkPreflight() {
+        try {
+          const result = await requestJson(`${apiBase}/preflight`);
+          renderPreflight(result);
+        } catch (error) {
+          readinessSummary.textContent = "Unavailable";
+          readinessList.replaceChildren();
+          const row = document.createElement("div");
+          row.className = "check-row";
+          const icon = document.createElement("span");
+          icon.className = "check-icon";
+          const copy = document.createElement("div");
+          copy.className = "check-copy";
+          const title = document.createElement("strong");
+          title.textContent = error.message;
+          const detail = document.createElement("span");
+          detail.textContent = "preflight";
+          copy.append(title, detail);
+          row.append(icon, copy);
+          readinessList.appendChild(row);
+        }
+      }
+
+      async function pollJob(statusUrl, resultUrl, downloadUrl) {
+        const statusPayload = await requestJson(`${apiBase}${statusUrl}`);
+        updateProgress(statusPayload);
+
+        if (statusPayload.status === "completed") {
+          clearInterval(pollTimer);
+          pollTimer = null;
+          setBusy(false);
+          currentJob = { statusUrl, resultUrl, downloadUrl };
+          const result = await requestJson(`${apiBase}${resultUrl}`);
+          renderRecords(result);
+          downloadLink.href = `${apiBase}${downloadUrl}`;
+          downloadLink.classList.remove("hidden", "disabled");
+          return;
+        }
+
+        if (statusPayload.status === "failed") {
+          clearInterval(pollTimer);
+          pollTimer = null;
+          setBusy(false);
+        }
+      }
+
+      function resetReviewState() {
+        currentJob = null;
+        currentResult = null;
+        currentEssayIndex = 0;
+        reviewDashboard.classList.add("hidden");
+        emptyState.classList.remove("hidden");
+        downloadLink.classList.add("hidden", "disabled");
+      }
+
+      async function startUploadJob(event) {
+        event.preventDefault();
+        if (!fileInput.files.length) {
+          setMessage("Choose an .xlsx workbook", true);
+          return;
+        }
+
+        setBusy(true);
+        resetReviewState();
+        progressFill.style.width = "4%";
+        summaryRows.textContent = "0";
+        summaryColumns.textContent = "0";
+        setMessage("Uploading workbook");
+
+        try {
+          const formData = new FormData(form);
+          const created = await requestJson(`${apiBase}/jobs`, {
+            method: "POST",
+            body: formData
+          });
+          updateProgress(created);
+          clearInterval(pollTimer);
+          pollTimer = setInterval(() => {
+            pollJob(created.status_url, created.result_url, created.download_url).catch((error) => {
+              clearInterval(pollTimer);
+              pollTimer = null;
+              setBusy(false);
+              setMessage(error.message, true);
+            });
+          }, 1200);
+        } catch (error) {
+          setBusy(false);
+          setMessage(error.message, true);
+        }
+      }
+
+      async function startSampleJob() {
+        setBusy(true);
+        resetReviewState();
+        progressFill.style.width = "4%";
+        setMessage("Starting sample job");
+
+        try {
+          const created = await requestJson(`${apiBase}/sample-job`, {
+            method: "POST"
+          });
+          updateProgress(created);
+          clearInterval(pollTimer);
+          pollTimer = setInterval(() => {
+            pollJob(created.status_url, created.result_url, created.download_url).catch((error) => {
+              clearInterval(pollTimer);
+              pollTimer = null;
+              setBusy(false);
+              setMessage(error.message, true);
+            });
+          }, 1200);
+        } catch (error) {
+          setBusy(false);
+          setMessage(error.message, true);
+        }
+      }
+
+      async function saveDecision() {
+        if (!currentJob || !currentResult) {
+          setMessage("No completed job is available for review", true);
+          return;
+        }
+
+        saveDecisionButton.disabled = true;
+        const previousLabel = saveDecisionButton.textContent;
+        saveDecisionButton.textContent = "Saving";
+
+        try {
+          const response = await requestJson(`${apiBase}${currentJob.statusUrl}/decision`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              row_index: currentEssayIndex,
+              decision: {
+                Rater_Final_Score: finalScoreControl.value,
+                Rater_Final_Placement: finalPlacementControl.value,
+                Rater_Action: raterActionControl.value,
+                Decision_Status: decisionStatusControl.value,
+                Admissions_Decision: admissionsDecisionControl.value,
+                Reason_Notes: reasonNotesControl.value
+              }
+            })
+          });
+          currentResult.records[currentEssayIndex] = response.record;
+          setMessage(`Saved decision for essay ${currentEssayIndex + 1}`);
+          renderCurrentEssay();
+        } catch (error) {
+          setMessage(error.message, true);
+        } finally {
+          saveDecisionButton.disabled = false;
+          saveDecisionButton.textContent = previousLabel;
+        }
+      }
+
+      essaySelector.addEventListener("change", () => {
+        currentEssayIndex = Number(essaySelector.value || 0);
+        renderCurrentEssay();
+      });
+      prevEssayButton.addEventListener("click", () => {
+        currentEssayIndex -= 1;
+        renderCurrentEssay();
+      });
+      nextEssayButton.addEventListener("click", () => {
+        currentEssayIndex += 1;
+        renderCurrentEssay();
+      });
+      form.addEventListener("submit", startUploadJob);
+      sampleButton.addEventListener("click", startSampleJob);
+      saveDecisionButton.addEventListener("click", saveDecision);
+      finalScoreControl.addEventListener("change", () => {
+        if (finalScoreControl.value && decisionStatusControl.value === "Pending") {
+          decisionStatusControl.value = "Finalized";
+        }
+      });
+      raterActionControl.addEventListener("change", () => {
+        if (raterActionControl.value === "Needs second review") {
+          decisionStatusControl.value = "Review";
+        }
+      });
+      checkHealth();
+      checkPreflight();
+    })();
+  </script>
+</div>

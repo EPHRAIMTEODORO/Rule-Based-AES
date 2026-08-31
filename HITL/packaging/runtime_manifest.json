@@ -1,0 +1,159 @@
+{
+  "schema_version": 1,
+  "app": {
+    "name": "HITL Academic Writing Scorer",
+    "mode": "offline_local_desktop",
+    "recommended_shell": "electron_with_python_sidecar",
+    "default_api_host": "127.0.0.1",
+    "default_api_port": 8765
+  },
+  "entrypoints": {
+    "local_api": "HITL/local_api_server.py",
+    "prototype_ui": "HITL/ui/index.html",
+    "preflight_cli": "HITL/preflight.py",
+    "processor_api": "HITL/hitl_processor.py",
+    "job_api": "HITL/app_backend.py"
+  },
+  "runtime_assets": {
+    "python": {
+      "required": true,
+      "minimum_version": "3.9",
+      "bundle_strategy": "bundle_private_runtime"
+    },
+    "python_packages": [
+      {
+        "package": "spacy",
+        "import_name": "spacy",
+        "required": true
+      },
+      {
+        "package": "wordfreq",
+        "import_name": "wordfreq",
+        "required": true
+      },
+      {
+        "package": "lexical-diversity",
+        "import_name": "lexical_diversity",
+        "required": true
+      },
+      {
+        "package": "language-tool-python",
+        "import_name": "language_tool_python",
+        "required": true
+      },
+      {
+        "package": "nltk",
+        "import_name": "nltk",
+        "required": true
+      },
+      {
+        "package": "openpyxl",
+        "import_name": "openpyxl",
+        "required": true
+      }
+    ],
+    "spacy_models": [
+      {
+        "name": "en_core_web_sm",
+        "required": true,
+        "bundle_strategy": "include_in_python_environment"
+      }
+    ],
+    "nltk_data": [
+      {
+        "resource": "tokenizers/punkt",
+        "required": true
+      },
+      {
+        "resource": "tokenizers/punkt_tab",
+        "required": true
+      }
+    ],
+    "java": {
+      "required": true,
+      "reason": "language-tool-python grammar error density",
+      "bundle_strategy": "bundle_private_jre"
+    },
+    "local_llm_runtime": {
+      "provider": "ollama",
+      "required": true,
+      "api_url": "http://127.0.0.1:11434/api/chat",
+      "bundle_strategy": "bundle_ollama_executable_and_model_store"
+    },
+    "local_llm_models": [
+      {
+        "name": "llama3:8b",
+        "required": true,
+        "approximate_size": "4.7 GB",
+        "bundle_strategy": "preload_into_private_ollama_model_directory",
+        "license_review_required": true
+      }
+    ],
+    "project_assets": [
+      {
+        "path": "HITL/Essays.xlsx",
+        "required": true,
+        "purpose": "packaged sample upload workbook"
+      },
+      {
+        "path": "data/awl_word_forms.json",
+        "required": true,
+        "purpose": "Academic Word List feature extraction"
+      },
+      {
+        "path": "HITL/ui/index.html",
+        "required": true,
+        "purpose": "local prototype UI"
+      }
+    ],
+    "runtime_directories": [
+      {
+        "path": "HITL/uploads",
+        "required": true,
+        "writable": true,
+        "packaged_as": "app_data_directory"
+      },
+      {
+        "path": "HITL/outputs",
+        "required": true,
+        "writable": true,
+        "packaged_as": "app_data_directory"
+      }
+    ]
+  },
+  "preflight_checks": [
+    "python_version",
+    "python_package:spacy",
+    "python_package:wordfreq",
+    "python_package:lexical-diversity",
+    "python_package:language-tool-python",
+    "python_package:nltk",
+    "python_package:openpyxl",
+    "spacy_model:en_core_web_sm",
+    "nltk_resource:tokenizers/punkt",
+    "nltk_resource:tokenizers/punkt_tab",
+    "java",
+    "sample_workbook",
+    "awl_data",
+    "uploads_writable",
+    "outputs_writable",
+    "ollama_executable",
+    "ollama_server",
+    "ollama_model"
+  ],
+  "offline_requirements": {
+    "internet_required_after_install": false,
+    "external_ui_assets_allowed": false,
+    "external_api_calls_allowed": false,
+    "localhost_api_allowed": true
+  },
+  "next_backend_tasks": [
+    "Make upload/output directories configurable by environment variable.",
+    "Make packaged sample workbook path configurable.",
+    "Make local API port configurable from the desktop launcher.",
+    "Add a shutdown endpoint for the desktop launcher.",
+    "Add app-data logging.",
+    "Add disk-space preflight checks for bundled model storage.",
+    "Add retry handling for malformed LLM JSON responses."
+  ]
+}
