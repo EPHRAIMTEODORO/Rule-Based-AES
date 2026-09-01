@@ -1,22 +1,23 @@
 <div id="hitl-app">
   <style>
     :root {
-      color-scheme: light dark;
-      --bg: light-dark(#f6f7f9, #17191c);
-      --panel: light-dark(#ffffff, #22252a);
-      --panel-soft: light-dark(#eef2f6, #2b3036);
-      --panel-muted: light-dark(#f8fafc, #1d2024);
-      --text: light-dark(#18202a, #f3f6f9);
-      --muted: light-dark(#667085, #a8b1bd);
-      --line: light-dark(#d8dee7, #3b424b);
-      --accent: light-dark(#0f766e, #22c7b8);
-      --accent-strong: light-dark(#0b5f59, #5eead4);
-      --ink: light-dark(#243447, #e8edf4);
-      --danger: light-dark(#b42318, #ff928a);
-      --warning: light-dark(#b54708, #f5c451);
-      --ok: light-dark(#067647, #65d58a);
-      --review: light-dark(#6941c6, #b69cff);
-      --shadow: light-dark(0 12px 28px rgba(16, 24, 40, 0.08), none);
+      color-scheme: light;
+      --bg: #f5f7fb;
+      --panel: #ffffff;
+      --panel-soft: #f8fafc;
+      --panel-muted: #eef2f6;
+      --text: #18202a;
+      --muted: #667085;
+      --line: #d9e1ea;
+      --line-soft: #edf1f5;
+      --accent: #0f766e;
+      --accent-strong: #0b5f59;
+      --ink: #243447;
+      --danger: #b42318;
+      --warning: #b54708;
+      --ok: #067647;
+      --review: #6941c6;
+      --shadow: none;
       font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
 
@@ -29,10 +30,10 @@
       background: var(--bg);
       color: var(--text);
       letter-spacing: 0;
+      font-size: 14px;
     }
 
     .app-shell {
-      min-height: 100vh;
       display: grid;
       grid-template-rows: auto auto 1fr;
     }
@@ -43,7 +44,7 @@
       align-items: center;
       justify-content: space-between;
       gap: 16px;
-      padding: 14px 24px;
+      padding: 12px 24px;
       border-bottom: 1px solid var(--line);
       background: var(--panel);
     }
@@ -81,7 +82,8 @@
       min-height: 36px;
       padding: 6px 10px;
       border: 1px solid var(--line);
-      border-radius: 6px;
+      border-radius: 4px;
+      background: var(--panel-soft);
       color: var(--muted);
       font-size: 13px;
       white-space: nowrap;
@@ -105,25 +107,29 @@
     .setup-band {
       display: grid;
       grid-template-columns: minmax(320px, 1.1fr) minmax(360px, 1.4fr) minmax(260px, 0.9fr);
-      gap: 14px;
-      padding: 14px 24px;
+      gap: 12px;
+      padding: 12px 24px;
       border-bottom: 1px solid var(--line);
       background: var(--panel-muted);
+    }
+
+    .setup-band.collapsed {
+      display: none;
     }
 
     .panel {
       background: var(--panel);
       border: 1px solid var(--line);
-      border-radius: 8px;
+      border-radius: 6px;
       box-shadow: var(--shadow);
     }
 
     .upload-panel,
     .status-panel,
     .readiness-panel {
-      padding: 14px;
+      padding: 12px;
       display: grid;
-      gap: 12px;
+      gap: 10px;
       align-content: start;
     }
 
@@ -164,7 +170,7 @@
       width: 100%;
       min-height: 36px;
       border: 1px solid var(--line);
-      border-radius: 6px;
+      border-radius: 4px;
       background: var(--panel);
       color: var(--text);
       padding: 8px 10px;
@@ -204,7 +210,7 @@
       justify-content: center;
       gap: 8px;
       border: 1px solid transparent;
-      border-radius: 6px;
+      border-radius: 4px;
       padding: 8px 12px;
       background: var(--accent);
       color: #ffffff;
@@ -335,26 +341,27 @@
 
     .review-shell {
       min-width: 0;
-      padding: 18px 24px 24px;
+      padding: 12px 18px 18px;
       display: grid;
-      gap: 16px;
+      gap: 10px;
     }
 
     .dashboard-grid {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 1px;
+      background: var(--line-soft);
+      border: 1px solid var(--line);
+      border-radius: 6px;
     }
 
     .dashboard-card {
-      min-height: 84px;
-      padding: 14px;
+      min-height: 64px;
+      padding: 10px 14px;
       display: grid;
       align-content: center;
-      gap: 6px;
+      gap: 4px;
       background: var(--panel);
-      border: 1px solid var(--line);
-      border-radius: 8px;
     }
 
     .dashboard-card span {
@@ -365,25 +372,50 @@
     }
 
     .dashboard-card strong {
-      font-size: 24px;
+      font-size: 22px;
       line-height: 1.05;
       font-variant-numeric: tabular-nums;
+    }
+
+    .dashboard-card.warning {
+      background: #fff8ed;
     }
 
     .review-layout {
       min-width: 0;
       display: grid;
-      grid-template-columns: minmax(220px, 280px) minmax(420px, 1fr) minmax(320px, 380px);
-      gap: 16px;
+      grid-template-columns: minmax(220px, 260px) minmax(560px, 1fr) minmax(300px, 360px) minmax(300px, 340px);
+      gap: 0;
       align-items: start;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+    }
+
+    .queue-panel,
+    .model-panel,
+    .decision-panel {
+      position: sticky;
+      top: 12px;
+    }
+
+    .review-layout > .panel,
+    .essay-panel {
+      border: none;
+      border-right: 1px solid var(--line);
+      border-radius: 0;
+      box-shadow: none;
+      background: var(--panel);
+    }
+
+    .review-layout > .panel:last-child {
+      border-right: none;
     }
 
     .queue-panel {
-      position: sticky;
-      top: 16px;
-      padding: 14px;
+      padding: 12px;
       display: grid;
-      gap: 12px;
+      gap: 10px;
     }
 
     .queue-controls {
@@ -395,6 +427,10 @@
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 8px;
+    }
+
+    .next-pending {
+      width: 100%;
     }
 
     .status-badge {
@@ -414,24 +450,34 @@
 
     .status-badge.finalized {
       color: var(--ok);
-      border-color: color-mix(in srgb, var(--ok) 45%, var(--line));
+      border-color: #8bd6a8;
+      background: #f0fdf4;
     }
 
     .status-badge.review {
       color: var(--review);
-      border-color: color-mix(in srgb, var(--review) 45%, var(--line));
+      border-color: #c7b9f2;
+      background: #f7f3ff;
     }
 
     .essay-panel {
       min-width: 0;
       display: grid;
-      gap: 14px;
+      grid-template-rows: auto auto;
+      gap: 0;
     }
 
     .essay-header {
-      padding: 16px;
+      padding: 14px;
       display: grid;
-      gap: 12px;
+      gap: 10px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .essay-panel .panel {
+      border: none;
+      border-radius: 0;
+      box-shadow: none;
     }
 
     .essay-title-row {
@@ -449,7 +495,7 @@
 
     .essay-title h2 {
       margin: 0;
-      font-size: 20px;
+      font-size: 19px;
       line-height: 1.2;
     }
 
@@ -460,27 +506,31 @@
     }
 
     .score-pair {
+      min-width: 0;
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 10px;
+      gap: 0;
       margin-bottom: 10px;
+      border: 1px solid var(--line-soft);
+      border-radius: 6px;
     }
 
     .evidence-grid {
+      min-width: 0;
       display: grid;
-      grid-template-columns: minmax(230px, 0.7fr) minmax(360px, 1.3fr);
-      gap: 10px;
-      align-items: stretch;
+      grid-template-columns: minmax(270px, 320px) minmax(420px, 1fr);
+      gap: 12px;
+      align-items: start;
     }
 
     .indicator-panel {
-      min-height: 100%;
-      padding: 12px;
+      min-width: 0;
+      padding: 10px 12px;
       border: 1px solid var(--line);
-      border-radius: 8px;
-      background: var(--panel-soft);
+      border-radius: 6px;
+      background: var(--panel);
       display: grid;
-      gap: 10px;
+      gap: 8px;
     }
 
     .indicator-title {
@@ -498,14 +548,19 @@
     }
 
     .score-box {
-      min-height: 78px;
-      padding: 12px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: var(--panel-soft);
+      height: 72px;
+      padding: 10px 12px;
+      border: none;
+      border-right: 1px solid var(--line-soft);
+      border-radius: 0;
+      background: transparent;
       display: grid;
       align-content: center;
       gap: 6px;
+    }
+
+    .score-box:last-child {
+      border-right: none;
     }
 
     .score-box span {
@@ -516,7 +571,7 @@
     }
 
     .score-box strong {
-      font-size: 26px;
+      font-size: 24px;
       line-height: 1;
       font-variant-numeric: tabular-nums;
     }
@@ -525,25 +580,31 @@
     .trait-item.low,
     .metric-item.low,
     .signal-check.low {
-      border-color: color-mix(in srgb, var(--danger) 45%, var(--line));
+      box-shadow: inset 3px 0 0 #f1b6b1;
     }
 
     .score-box.mid,
     .trait-item.mid,
     .metric-item.mid,
     .signal-check.mid {
-      border-color: color-mix(in srgb, var(--warning) 45%, var(--line));
+      box-shadow: inset 3px 0 0 #e9c772;
     }
 
     .score-box.high,
     .trait-item.high,
     .metric-item.high,
     .signal-check.high {
-      border-color: color-mix(in srgb, var(--ok) 45%, var(--line));
+      box-shadow: inset 3px 0 0 #8bd6a8;
+    }
+
+    .signal-check.alert {
+      border-color: #efaba5;
+      background: #fff5f5;
     }
 
     .band-pill {
       width: fit-content;
+      max-width: 100%;
       min-height: 24px;
       display: inline-flex;
       align-items: center;
@@ -551,7 +612,7 @@
       padding: 4px 8px;
       border-radius: 999px;
       border: 1px solid var(--line);
-      background: var(--panel);
+      background: var(--panel-soft);
       color: var(--muted);
       font-size: 12px;
       font-weight: 750;
@@ -560,115 +621,147 @@
 
     .band-pill.low {
       color: var(--danger);
-      border-color: color-mix(in srgb, var(--danger) 45%, var(--line));
+      border-color: #f1b6b1;
+      background: #fff5f5;
     }
 
     .band-pill.mid {
       color: var(--warning);
-      border-color: color-mix(in srgb, var(--warning) 45%, var(--line));
+      border-color: #e9c772;
+      background: #fff8ed;
     }
 
     .band-pill.high {
       color: var(--ok);
-      border-color: color-mix(in srgb, var(--ok) 45%, var(--line));
+      border-color: #8bd6a8;
+      background: #f0fdf4;
     }
 
     .signal-check {
-      min-height: 40px;
-      padding: 10px 12px;
+      min-height: 44px;
+      padding: 8px 10px;
       border: 1px solid var(--line);
-      border-radius: 8px;
-      background: var(--panel-soft);
+      border-radius: 6px;
+      background: var(--panel);
       color: var(--ink);
       font-size: 14px;
       line-height: 1.45;
       display: flex;
       align-items: center;
       justify-content: space-between;
+      flex-wrap: wrap;
       gap: 12px;
     }
 
     .essay-body {
-      padding: 18px;
-      max-height: 52vh;
-      overflow: auto;
-      line-height: 1.7;
+      padding: 18px 20px;
+      line-height: 1.78;
       white-space: pre-wrap;
       overflow-wrap: anywhere;
-    }
-
-    .section-block {
-      padding: 16px;
-      display: grid;
-      gap: 12px;
-    }
-
-    .section-block h3 {
-      margin: 0;
-      font-size: 15px;
-      line-height: 1.2;
+      word-break: normal;
     }
 
     .trait-grid,
     .metric-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 8px;
+      gap: 0;
     }
 
     .metric-grid.compact {
-      grid-template-columns: repeat(5, minmax(86px, 1fr));
-      gap: 8px;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      border: 1px solid var(--line-soft);
+      border-radius: 6px;
+      gap: 1px;
+      background: var(--line-soft);
     }
 
     .trait-item,
     .metric-item {
-      min-height: 64px;
+      min-height: 78px;
       padding: 10px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: var(--panel-soft);
+      border: none;
+      border-radius: 0;
+      background: var(--panel);
       display: grid;
       align-content: center;
       gap: 4px;
+      min-width: 0;
     }
 
     .metric-grid.compact .metric-item {
-      min-height: 78px;
-      padding: 8px;
+      min-height: 82px;
+      height: auto;
+      padding: 10px;
     }
 
     .trait-item span,
     .metric-item span {
       color: var(--muted);
-      font-size: 11px;
+      font-size: 12px;
+      line-height: 1.22;
       font-weight: 750;
       text-transform: uppercase;
+      overflow-wrap: normal;
+      word-break: normal;
     }
 
     .trait-item strong,
     .metric-item strong {
       font-size: 18px;
       font-variant-numeric: tabular-nums;
+      overflow-wrap: anywhere;
     }
 
     .metric-grid.compact .metric-item strong {
-      font-size: 16px;
+      font-size: 18px;
+      line-height: 1.15;
+    }
+
+    .model-panel {
+      padding: 14px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .model-panel .trait-grid {
+      grid-template-columns: 1fr;
+      border: 1px solid var(--line-soft);
+      border-radius: 6px;
+      gap: 1px;
+      background: var(--line-soft);
+    }
+
+    .model-panel .trait-item {
+      min-height: 58px;
+      padding: 8px 10px;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      column-gap: 8px;
+      border-right: none;
+    }
+
+    .model-panel .trait-item span {
+      grid-column: 1 / 3;
+    }
+
+    .model-panel .trait-item strong {
+      font-size: 20px;
     }
 
     .justification {
       color: var(--ink);
-      line-height: 1.6;
+      font-size: 14px;
+      line-height: 1.65;
       white-space: pre-wrap;
       overflow-wrap: anywhere;
+      word-break: normal;
     }
 
     .decision-panel {
-      position: sticky;
-      top: 16px;
-      padding: 16px;
+      padding: 14px;
       display: grid;
-      gap: 12px;
+      gap: 10px;
     }
 
     .decision-panel h2 {
@@ -678,12 +771,43 @@
 
     .decision-grid {
       display: grid;
-      gap: 10px;
+      gap: 8px;
+    }
+
+    .readonly-value {
+      min-height: 36px;
+      display: flex;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--line-soft);
+      color: var(--ink);
+      font-size: 14px;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+
+    .readonly-value.notes {
+      min-height: 72px;
+      align-items: flex-start;
+      white-space: pre-wrap;
     }
 
     .save-decision {
       width: 100%;
       min-height: 40px;
+    }
+
+    .decision-actions {
+      display: grid;
+      gap: 8px;
+      position: sticky;
+      bottom: 12px;
+      padding-top: 4px;
+      background: var(--panel);
+    }
+
+    .decision-actions button {
+      width: 100%;
     }
 
     .empty-state {
@@ -703,19 +827,56 @@
       display: none !important;
     }
 
-    @media (max-width: 1180px) {
+    @media (max-width: 1500px) {
+      .evidence-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .metric-grid.compact {
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      }
+    }
+
+    @media (max-width: 1280px) {
       .setup-band,
-      .review-layout {
+      .review-layout,
+      .evidence-grid {
         grid-template-columns: 1fr;
       }
 
       .queue-panel,
+      .model-panel,
       .decision-panel {
         position: static;
+        border-right: none;
+        border-bottom: 1px solid var(--line);
       }
 
       .review-layout {
-        gap: 12px;
+        gap: 0;
+      }
+
+      .essay-panel {
+        border-right: none;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .model-panel .trait-grid {
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      }
+    }
+
+    @media (max-width: 1024px) {
+      .review-shell {
+        padding: 10px 12px 14px;
+      }
+
+      .dashboard-grid {
+        grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      }
+
+      .metric-grid.compact {
+        grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
       }
     }
 
@@ -732,6 +893,7 @@
       }
 
       .download-link,
+      .top-actions button,
       .server-pill {
         width: 100%;
       }
@@ -745,8 +907,13 @@
       .status-grid,
       .dashboard-grid,
       .score-pair,
+      .evidence-grid,
       .trait-grid,
       .metric-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .metric-grid.compact {
         grid-template-columns: 1fr;
       }
 
@@ -763,6 +930,7 @@
         <span>Local review dashboard</span>
       </div>
       <div class="top-actions">
+        <button id="setup-toggle" class="secondary" type="button">Setup</button>
         <a id="download-link" class="download-link secondary disabled hidden" href="#">Download Workbook</a>
         <div class="server-pill" aria-live="polite">
           <span id="server-dot" class="dot"></span>
@@ -771,7 +939,7 @@
       </div>
     </header>
 
-    <section class="setup-band" aria-label="Workbook processing">
+    <section id="setup-band" class="setup-band" aria-label="Workbook processing">
       <form id="upload-form" class="panel upload-panel">
         <div class="panel-heading">
           <h2>Workbook</h2>
@@ -782,8 +950,8 @@
         </div>
         <div class="field-row">
           <div class="field">
-            <label for="essay-id-column">ID</label>
-            <input id="essay-id-column" name="essay_id_column" value="id" autocomplete="off">
+            <label for="essay-id-column">Student ID</label>
+            <input id="essay-id-column" name="essay_id_column" value="Student ID" autocomplete="off">
           </div>
           <div class="field">
             <label for="prompt-column">Prompt</label>
@@ -855,6 +1023,10 @@
             <span>Finalized</span>
             <strong id="dash-finalized">0</strong>
           </div>
+          <div id="dash-mismatch-card" class="dashboard-card">
+            <span>Mismatches</span>
+            <strong id="dash-mismatch">0</strong>
+          </div>
         </div>
 
         <div class="review-layout">
@@ -872,6 +1044,7 @@
                 <button id="prev-essay" class="secondary" type="button">Previous</button>
                 <button id="next-essay" class="secondary" type="button">Next</button>
               </div>
+              <button id="next-pending" class="next-pending" type="button">Next Pending</button>
             </div>
             <div>
               <span id="current-status-badge" class="status-badge">Pending</span>
@@ -919,14 +1092,15 @@
             <section class="panel">
               <div id="essay-text" class="essay-body"></div>
             </section>
-
-            <section class="panel section-block">
-              <h3>Model Evaluation</h3>
-              <div id="trait-grid" class="trait-grid"></div>
-              <div id="llm-justification" class="justification"></div>
-            </section>
-
           </article>
+
+          <aside class="panel model-panel" aria-label="Model evaluation">
+            <div class="panel-heading">
+              <h2>Model Evaluation</h2>
+            </div>
+            <div id="trait-grid" class="trait-grid"></div>
+            <div id="llm-justification" class="justification"></div>
+          </aside>
 
           <aside class="panel decision-panel" aria-label="Human decision">
             <div class="panel-heading">
@@ -939,25 +1113,24 @@
               </div>
               <div class="field">
                 <label for="rater-final-placement">Placement</label>
-                <select id="rater-final-placement"></select>
+                <div id="rater-final-placement" class="readonly-value">Choose a final score</div>
               </div>
               <div class="field">
                 <label for="rater-action">Action</label>
-                <select id="rater-action"></select>
+                <div id="rater-action" class="readonly-value">Pending</div>
               </div>
               <div class="field">
                 <label for="decision-status">Status</label>
-                <select id="decision-status"></select>
-              </div>
-              <div class="field">
-                <label for="admissions-decision">Admissions</label>
-                <select id="admissions-decision"></select>
+                <div id="decision-status" class="readonly-value">Pending</div>
               </div>
               <div class="field">
                 <label for="reason-notes">Notes</label>
-                <textarea id="reason-notes"></textarea>
+                <div id="reason-notes" class="readonly-value notes">No notes needed</div>
               </div>
-              <button id="save-decision" class="save-decision" type="button">Save Decision</button>
+              <div class="decision-actions">
+                <button id="accept-system-decision" class="secondary" type="button">Accept System Decision</button>
+                <button id="save-decision" class="save-decision" type="button">Save Decision</button>
+              </div>
             </div>
           </aside>
         </div>
@@ -972,6 +1145,8 @@
       const fileInput = document.getElementById("workbook-file");
       const startButton = document.getElementById("start-button");
       const sampleButton = document.getElementById("sample-button");
+      const setupBand = document.getElementById("setup-band");
+      const setupToggle = document.getElementById("setup-toggle");
       const serverDot = document.getElementById("server-dot");
       const serverStatus = document.getElementById("server-status");
       const jobIdText = document.getElementById("job-id");
@@ -987,9 +1162,12 @@
       const dashPending = document.getElementById("dash-pending");
       const dashReview = document.getElementById("dash-review");
       const dashFinalized = document.getElementById("dash-finalized");
+      const dashMismatch = document.getElementById("dash-mismatch");
+      const dashMismatchCard = document.getElementById("dash-mismatch-card");
       const essaySelector = document.getElementById("essay-selector");
       const prevEssayButton = document.getElementById("prev-essay");
       const nextEssayButton = document.getElementById("next-essay");
+      const nextPendingButton = document.getElementById("next-pending");
       const essayPosition = document.getElementById("essay-position");
       const currentStatusBadge = document.getElementById("current-status-badge");
       const currentUpdated = document.getElementById("current-updated");
@@ -1014,8 +1192,8 @@
       const finalPlacementControl = document.getElementById("rater-final-placement");
       const raterActionControl = document.getElementById("rater-action");
       const decisionStatusControl = document.getElementById("decision-status");
-      const admissionsDecisionControl = document.getElementById("admissions-decision");
       const reasonNotesControl = document.getElementById("reason-notes");
+      const acceptSystemButton = document.getElementById("accept-system-decision");
       const saveDecisionButton = document.getElementById("save-decision");
 
       let pollTimer = null;
@@ -1024,10 +1202,6 @@
       let currentEssayIndex = 0;
 
       const scoreOptions = ["", "1", "1.5", "2", "2.5", "3", "3.5", "4", "4.5", "5", "5.5", "6"];
-      const placementOptions = ["", "Pre-EIL", "Advanced I", "Advanced II", "Post EIL"];
-      const actionOptions = ["", "Accept system score", "Override score", "Needs second review", "Request follow-up"];
-      const statusOptions = ["Pending", "Finalized", "Review"];
-      const admissionsOptions = ["", "Auto-confirmed", "Requires follow-up", "Hold"];
 
       const traitFields = [
         ["Organization", "LLM_Organization_Coherence"],
@@ -1040,9 +1214,9 @@
       const metricFields = [
         ["Word Count", "Word_Count"],
         ["Sentence Count", "Sentence_Count"],
-        ["Grammar Errors per 100 Words", "Grammar_Errors_per_100"],
+        ["Errors per 100 Words", "Grammar_Errors_per_100"],
         ["Vocabulary Variety", "Type_Token_Ratio"],
-        ["Academic Word Use", "AWL_Ratio"]
+        ["Academic Words", "AWL_Ratio"]
       ];
 
       function fillSelect(select, values) {
@@ -1056,10 +1230,6 @@
       }
 
       fillSelect(finalScoreControl, scoreOptions);
-      fillSelect(finalPlacementControl, placementOptions);
-      fillSelect(raterActionControl, actionOptions);
-      fillSelect(decisionStatusControl, statusOptions);
-      fillSelect(admissionsDecisionControl, admissionsOptions);
 
       function setMessage(text, isError = false) {
         message.textContent = text;
@@ -1095,9 +1265,29 @@
         return displayValue(record.Decision_Status, "Pending");
       }
 
+      function isPending(record) {
+        return normalizedStatus(record).toLowerCase() === "pending";
+      }
+
       function numericValue(value) {
         const number = Number(value);
         return Number.isFinite(number) ? number : null;
+      }
+
+      function finalScoreOption(value) {
+        const number = numericValue(value);
+        if (number === null) {
+          return "";
+        }
+
+        const exact = String(number);
+        if (scoreOptions.includes(exact)) {
+          return exact;
+        }
+
+        const rounded = Math.round(number * 2) / 2;
+        const roundedOption = String(rounded);
+        return scoreOptions.includes(roundedOption) ? roundedOption : "";
       }
 
       function makeBand(label, tone, rank) {
@@ -1189,6 +1379,32 @@
         return makeBand("Low writing signals", "low", 1);
       }
 
+      function essaySignalBands(record) {
+        return {
+          model: scoreBand(record.llm_recommended_score),
+          writing: indicatorCompositeBand(record)
+        };
+      }
+
+      function hasSignalMismatch(record) {
+        const bands = essaySignalBands(record);
+        return Boolean(bands.model.rank && bands.writing.rank && Math.abs(bands.model.rank - bands.writing.rank) >= 2);
+      }
+
+      function nextPendingIndex() {
+        const records = getRecords();
+        if (!records.length) {
+          return -1;
+        }
+        for (let offset = 1; offset < records.length; offset += 1) {
+          const index = (currentEssayIndex + offset) % records.length;
+          if (isPending(records[index])) {
+            return index;
+          }
+        }
+        return -1;
+      }
+
       function applyBand(element, band, baseClass) {
         element.className = `${baseClass}${band.tone ? ` ${band.tone}` : ""}`;
       }
@@ -1217,6 +1433,7 @@
         let pending = 0;
         let review = 0;
         let finalized = 0;
+        let mismatches = 0;
         records.forEach((record) => {
           const status = normalizedStatus(record).toLowerCase();
           if (status === "finalized") {
@@ -1226,11 +1443,16 @@
           } else {
             pending += 1;
           }
+          if (hasSignalMismatch(record)) {
+            mismatches += 1;
+          }
         });
         dashTotal.textContent = String(records.length);
         dashPending.textContent = String(pending);
         dashReview.textContent = String(review);
         dashFinalized.textContent = String(finalized);
+        dashMismatch.textContent = String(mismatches);
+        dashMismatchCard.classList.toggle("warning", mismatches > 0);
       }
 
       function updateEssaySelector() {
@@ -1292,6 +1514,70 @@
         return "Model score and writing indicators look aligned";
       }
 
+      function placementForScore(value) {
+        const score = numericValue(value);
+        if (score === null) {
+          return "Choose a final score";
+        }
+        if (score <= 2.5) {
+          return "Pre-EIL";
+        }
+        if (score <= 3.5) {
+          return "Advanced I";
+        }
+        if (score <= 4.5) {
+          return "Advanced II";
+        }
+        return "Post EIL";
+      }
+
+      function derivedDecision(record, finalScoreValue) {
+        const finalScore = numericValue(finalScoreValue);
+        if (finalScore === null) {
+          return {
+            Rater_Final_Placement: "Choose a final score",
+            Rater_Action: "Pending",
+            Decision_Status: "Pending",
+            Reason_Notes: "No notes needed"
+          };
+        }
+
+        const modelScoreValue = numericValue(record.llm_recommended_score);
+        const placement = placementForScore(finalScore);
+        const difference = modelScoreValue === null ? 0 : Math.abs(finalScore - modelScoreValue);
+        const action = difference >= 1 ? "Override score" : "Accept system score";
+        const notes = difference >= 1
+          ? `Final score differs from model score by ${difference.toFixed(1)} point${difference === 1 ? "" : "s"}.`
+          : "No notes needed";
+
+        return {
+          Rater_Final_Placement: placement,
+          Rater_Action: action,
+          Decision_Status: "Finalized",
+          Reason_Notes: notes
+        };
+      }
+
+      function setReadonlyValue(element, value) {
+        element.textContent = displayValue(value, "Pending");
+      }
+
+      function updateDecisionPreview(record) {
+        const preview = derivedDecision(record, finalScoreControl.value);
+        const previewFinalBand = scoreBand(finalScoreControl.value);
+        finalScoreDisplay.textContent = displayValue(finalScoreControl.value, "Pending");
+        applyBand(finalScoreBox, previewFinalBand, "score-box");
+        updateBandPill(
+          finalScoreBand,
+          finalScoreControl.value ? previewFinalBand : makeBand("Pending", "", 0)
+        );
+        setReadonlyValue(finalPlacementControl, preview.Rater_Final_Placement);
+        setReadonlyValue(raterActionControl, preview.Rater_Action);
+        setReadonlyValue(decisionStatusControl, preview.Decision_Status);
+        setReadonlyValue(reasonNotesControl, preview.Reason_Notes);
+        return preview;
+      }
+
       function setSelectValue(select, value) {
         select.value = String(value || "");
         if (select.value !== String(value || "")) {
@@ -1314,12 +1600,14 @@
         const text = getRecordValue(record, ["Essay_Text", "Essay", "text_clean"], "");
         const status = normalizedStatus(record);
         const attention = getRecordValue(record, ["Attention_Flag", "attention_flag", "Profile_Attention_Flag"], "");
+        const modelScoreOption = finalScoreOption(record.llm_recommended_score);
 
         updateDashboardCounts();
         updateEssaySelector();
         essayPosition.textContent = `${currentEssayIndex + 1} of ${records.length}`;
         prevEssayButton.disabled = currentEssayIndex === 0;
         nextEssayButton.disabled = currentEssayIndex >= records.length - 1;
+        nextPendingButton.disabled = nextPendingIndex() < 0;
 
         currentStatusBadge.textContent = status;
         currentStatusBadge.className = `status-badge${statusClass(status)}`;
@@ -1331,16 +1619,18 @@
         finalScoreDisplay.textContent = displayValue(record.Rater_Final_Score, "Pending");
         essayText.textContent = text || "Essay text unavailable";
 
-        const modelBand = scoreBand(record.llm_recommended_score);
+        const bands = essaySignalBands(record);
+        const modelBand = bands.model;
         const finalBand = scoreBand(record.Rater_Final_Score);
-        const writingBand = indicatorCompositeBand(record);
+        const writingBand = bands.writing;
+        const mismatch = hasSignalMismatch(record);
         applyBand(modelScoreBox, modelBand, "score-box");
         applyBand(finalScoreBox, finalBand, "score-box");
         updateBandPill(modelScoreBand, modelBand);
         updateBandPill(finalScoreBand, record.Rater_Final_Score ? finalBand : makeBand("Pending", "", 0));
-        updateBandPill(indicatorBand, writingBand);
+        updateBandPill(indicatorBand, mismatch ? makeBand("Mismatch", "low", 1) : writingBand);
         signalCheck.firstElementChild.textContent = signalMessage(modelBand, writingBand);
-        applyBand(signalCheck, writingBand, "signal-check");
+        signalCheck.className = mismatch ? "signal-check alert" : `signal-check${writingBand.tone ? ` ${writingBand.tone}` : ""}`;
 
         attentionBadge.classList.toggle("hidden", !attention);
         attentionBadge.textContent = attention;
@@ -1350,11 +1640,8 @@
         llmJustification.textContent = displayValue(record.llm_justification, "No model justification available.");
 
         setSelectValue(finalScoreControl, record.Rater_Final_Score);
-        setSelectValue(finalPlacementControl, record.Rater_Final_Placement);
-        setSelectValue(raterActionControl, record.Rater_Action);
-        setSelectValue(decisionStatusControl, record.Decision_Status || "Pending");
-        setSelectValue(admissionsDecisionControl, record.Admissions_Decision);
-        reasonNotesControl.value = String(record.Reason_Notes || "");
+        updateDecisionPreview(record);
+        acceptSystemButton.disabled = !modelScoreOption;
 
         emptyState.classList.add("hidden");
         reviewDashboard.classList.remove("hidden");
@@ -1457,6 +1744,7 @@
           renderRecords(result);
           downloadLink.href = `${apiBase}${downloadUrl}`;
           downloadLink.classList.remove("hidden", "disabled");
+          setupBand.classList.add("collapsed");
           return;
         }
 
@@ -1474,6 +1762,7 @@
         reviewDashboard.classList.add("hidden");
         emptyState.classList.remove("hidden");
         downloadLink.classList.add("hidden", "disabled");
+        setupBand.classList.remove("collapsed");
       }
 
       async function startUploadJob(event) {
@@ -1543,12 +1832,20 @@
           setMessage("No completed job is available for review", true);
           return;
         }
+        if (!finalScoreControl.value) {
+          setMessage("Choose a final score before saving", true);
+          finalScoreControl.focus();
+          return;
+        }
 
+        acceptSystemButton.disabled = true;
         saveDecisionButton.disabled = true;
         const previousLabel = saveDecisionButton.textContent;
         saveDecisionButton.textContent = "Saving";
 
         try {
+          const currentRecord = getRecords()[currentEssayIndex] || {};
+          const preview = updateDecisionPreview(currentRecord);
           const response = await requestJson(`${apiBase}${currentJob.statusUrl}/decision`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -1556,11 +1853,10 @@
               row_index: currentEssayIndex,
               decision: {
                 Rater_Final_Score: finalScoreControl.value,
-                Rater_Final_Placement: finalPlacementControl.value,
-                Rater_Action: raterActionControl.value,
-                Decision_Status: decisionStatusControl.value,
-                Admissions_Decision: admissionsDecisionControl.value,
-                Reason_Notes: reasonNotesControl.value
+                Rater_Final_Placement: preview.Rater_Final_Placement,
+                Rater_Action: preview.Rater_Action,
+                Decision_Status: preview.Decision_Status,
+                Reason_Notes: preview.Reason_Notes
               }
             })
           });
@@ -1572,7 +1868,22 @@
         } finally {
           saveDecisionButton.disabled = false;
           saveDecisionButton.textContent = previousLabel;
+          const currentRecord = getRecords()[currentEssayIndex] || {};
+          acceptSystemButton.disabled = !finalScoreOption(currentRecord.llm_recommended_score);
         }
+      }
+
+      async function acceptSystemDecision() {
+        const currentRecord = getRecords()[currentEssayIndex] || {};
+        const modelFinalScore = finalScoreOption(currentRecord.llm_recommended_score);
+        if (!modelFinalScore) {
+          setMessage("No model score is available to accept", true);
+          return;
+        }
+
+        finalScoreControl.value = modelFinalScore;
+        updateDecisionPreview(currentRecord);
+        await saveDecision();
       }
 
       essaySelector.addEventListener("change", () => {
@@ -1587,18 +1898,22 @@
         currentEssayIndex += 1;
         renderCurrentEssay();
       });
-      form.addEventListener("submit", startUploadJob);
-      sampleButton.addEventListener("click", startSampleJob);
-      saveDecisionButton.addEventListener("click", saveDecision);
-      finalScoreControl.addEventListener("change", () => {
-        if (finalScoreControl.value && decisionStatusControl.value === "Pending") {
-          decisionStatusControl.value = "Finalized";
+      nextPendingButton.addEventListener("click", () => {
+        const index = nextPendingIndex();
+        if (index >= 0) {
+          currentEssayIndex = index;
+          renderCurrentEssay();
         }
       });
-      raterActionControl.addEventListener("change", () => {
-        if (raterActionControl.value === "Needs second review") {
-          decisionStatusControl.value = "Review";
-        }
+      setupToggle.addEventListener("click", () => {
+        setupBand.classList.toggle("collapsed");
+      });
+      form.addEventListener("submit", startUploadJob);
+      sampleButton.addEventListener("click", startSampleJob);
+      acceptSystemButton.addEventListener("click", acceptSystemDecision);
+      saveDecisionButton.addEventListener("click", saveDecision);
+      finalScoreControl.addEventListener("change", () => {
+        updateDecisionPreview(getRecords()[currentEssayIndex] || {});
       });
       checkHealth();
       checkPreflight();

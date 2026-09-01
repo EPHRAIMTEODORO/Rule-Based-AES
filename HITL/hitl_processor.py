@@ -29,7 +29,7 @@ if str(PROJECT_DIR) not in sys.path:
 import hybrid_llm_aes as scorer  # noqa: E402
 
 
-DEFAULT_ID_COLUMN = "id"
+DEFAULT_ID_COLUMN = "Student ID"
 DEFAULT_PROMPT_COLUMN = "Topic"
 DEFAULT_TEXT_COLUMN = "Essay"
 DEFAULT_MODEL = "llama3:8b"
@@ -39,7 +39,6 @@ HUMAN_DECISION_FIELDNAMES = [
     "Rater_Final_Placement",
     "Rater_Action",
     "Decision_Status",
-    "Admissions_Decision",
     "Reason_Notes",
     "Decision_Updated_At",
 ]
@@ -242,7 +241,6 @@ def _with_initial_decision_fields(row: dict) -> dict:
         "Rater_Final_Placement": row.get("Rater_Final_Placement", ""),
         "Rater_Action": row.get("Rater_Action", ""),
         "Decision_Status": row.get("Decision_Status") or "Pending",
-        "Admissions_Decision": row.get("Admissions_Decision", ""),
         "Reason_Notes": row.get("Reason_Notes", ""),
         "Decision_Updated_At": row.get("Decision_Updated_At", ""),
     }

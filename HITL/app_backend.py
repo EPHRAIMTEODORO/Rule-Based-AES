@@ -207,7 +207,7 @@ def _run_job(job_id: str, processor_kwargs: dict) -> None:
 def start_job(
     input_path: str,
     output_dir: Union[str, Path] = DEFAULT_OUTPUT_DIR,
-    essay_id_column: Optional[str] = "id",
+    essay_id_column: Optional[str] = "Student ID",
     prompt_column: Optional[str] = "Topic",
     text_column: Optional[str] = "Essay",
     sheet_name: Optional[str] = None,

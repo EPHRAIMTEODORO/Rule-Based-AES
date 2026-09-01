@@ -296,7 +296,7 @@ class HITLRequestHandler(BaseHTTPRequestHandler):
         job_id = start_job(
             input_path=input_path,
             output_dir=OUTPUT_DIR,
-            essay_id_column=str(_field_value(form, "essay_id_column", "id")),
+            essay_id_column=str(_field_value(form, "essay_id_column", "Student ID")),
             prompt_column=str(_field_value(form, "prompt_column", "Topic")),
             text_column=str(_field_value(form, "text_column", "Essay")),
             sheet_name=_field_value(form, "sheet_name") or None,
@@ -321,7 +321,7 @@ class HITLRequestHandler(BaseHTTPRequestHandler):
         job_id = start_job(
             input_path=str(input_path),
             output_dir=payload.get("output_dir", str(OUTPUT_DIR)),
-            essay_id_column=payload.get("essay_id_column", "id"),
+            essay_id_column=payload.get("essay_id_column", "Student ID"),
             prompt_column=payload.get("prompt_column", "Topic"),
             text_column=payload.get("text_column", "Essay"),
             sheet_name=payload.get("sheet_name") or None,

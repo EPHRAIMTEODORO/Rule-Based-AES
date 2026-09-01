@@ -172,7 +172,7 @@ from HITL import get_job_result, get_job_status, start_job, update_job_decision
 
 job_id = start_job(
     input_path="HITL/Essays.xlsx",
-    essay_id_column="id",
+    essay_id_column="Student ID",
     prompt_column="Topic",
     text_column="Essay",
 )
@@ -189,7 +189,6 @@ updated_row = update_job_decision(
         "Rater_Final_Score": 4.5,
         "Rater_Final_Placement": "Advanced II",
         "Rater_Action": "Override score",
-        "Admissions_Decision": "Follow up",
         "Reason_Notes": "Human rater found stronger organization than the model.",
     },
 )
@@ -245,7 +244,7 @@ Minimal upload flow:
 ```javascript
 const form = new FormData();
 form.append("file", selectedFile);
-form.append("essay_id_column", "id");
+form.append("essay_id_column", "Student ID");
 form.append("prompt_column", "Topic");
 form.append("text_column", "Essay");
 
@@ -275,7 +274,6 @@ await fetch(`http://127.0.0.1:8765${created.status_url}/decision`, {
       Rater_Final_Score: "4.5",
       Rater_Final_Placement: "Advanced II",
       Rater_Action: "Override score",
-      Admissions_Decision: "Follow up",
       Reason_Notes: "Human rater found stronger organization than the model.",
     },
   }),
@@ -290,16 +288,16 @@ Rater_Final_Score
 Rater_Final_Placement
 Rater_Action
 Decision_Status
-Admissions_Decision
 Reason_Notes
 Decision_Updated_At
 ```
 
 The included UI in `HITL/ui/index.html` uses this same flow: upload workbook,
-poll status, show a review dashboard, let the rater move through one essay at a
-time, save final decisions, and expose the completed workbook download link.
-Its sample button calls `/sample-job`, so packaged app users do not need to know
-where the sample workbook lives on disk.
+poll status, collapse setup after processing, show a review dashboard, let the
+rater move through one essay at a time, flag model/indicator mismatches, jump
+to the next pending essay, save final decisions, and expose the completed
+workbook download link. Its sample button calls `/sample-job`, so packaged app
+users do not need to know where the sample workbook lives on disk.
 
 For a quick test on only a few essays:
 
