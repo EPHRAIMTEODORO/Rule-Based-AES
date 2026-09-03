@@ -8,6 +8,10 @@
     "default_api_port": 8765
   },
   "entrypoints": {
+    "electron_desktop_shell": "HITL/desktop/main.cjs",
+    "python_sidecar_builder": "HITL/desktop/scripts/build-python-sidecar.cjs",
+    "runtime_asset_preparer": "HITL/desktop/scripts/prepare-runtime-assets.cjs",
+    "electron_runtime_assets": "HITL/desktop/runtime-assets",
     "local_api": "HITL/local_api_server.py",
     "prototype_ui": "HITL/ui/index.html",
     "preflight_cli": "HITL/preflight.py",
@@ -18,7 +22,7 @@
     "python": {
       "required": true,
       "minimum_version": "3.9",
-      "bundle_strategy": "bundle_private_runtime"
+      "bundle_strategy": "pyinstaller_sidecar"
     },
     "python_packages": [
       {
@@ -72,20 +76,23 @@
     "java": {
       "required": true,
       "reason": "language-tool-python grammar error density",
-      "bundle_strategy": "bundle_private_jre"
+      "bundle_strategy": "bundle_private_jre",
+      "drop_in_path": "HITL/desktop/runtime-assets/jre/<platform>/bin/java"
     },
     "local_llm_runtime": {
       "provider": "ollama",
       "required": true,
-      "api_url": "http://127.0.0.1:11434/api/chat",
-      "bundle_strategy": "bundle_ollama_executable_and_model_store"
+      "api_url": "electron-selected localhost port, default preference 11434",
+      "bundle_strategy": "bundle_ollama_executable_and_model_store",
+      "drop_in_path": "HITL/desktop/runtime-assets/ollama/<platform>/ollama"
     },
     "local_llm_models": [
       {
         "name": "llama3:8b",
         "required": true,
         "approximate_size": "4.7 GB",
-        "bundle_strategy": "preload_into_private_ollama_model_directory",
+        "bundle_strategy": "copy_runtime_assets_ollama_models_to_app_data",
+        "drop_in_path": "HITL/desktop/runtime-assets/ollama-models",
         "license_review_required": true
       }
     ],
@@ -137,6 +144,8 @@
     "awl_data",
     "uploads_writable",
     "outputs_writable",
+    "ollama_models_writable",
+    "disk_space",
     "ollama_executable",
     "ollama_server",
     "ollama_model"
@@ -148,12 +157,9 @@
     "localhost_api_allowed": true
   },
   "next_backend_tasks": [
-    "Make upload/output directories configurable by environment variable.",
-    "Make packaged sample workbook path configurable.",
-    "Make local API port configurable from the desktop launcher.",
-    "Add a shutdown endpoint for the desktop launcher.",
-    "Add app-data logging.",
-    "Add disk-space preflight checks for bundled model storage.",
-    "Add retry handling for malformed LLM JSON responses."
+    "Bundle a private Java runtime for LanguageTool.",
+    "Add the actual Ollama executable and model files to the runtime asset folders.",
+    "Review and include license/notice files for bundled runtimes and model weights.",
+    "Run a clean-machine offline packaging test."
   ]
 }

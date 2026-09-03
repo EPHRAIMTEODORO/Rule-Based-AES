@@ -118,17 +118,25 @@ For consistency with current scoring, bundle Java for now.
 
 ### Phase 1: Local App Bundle Skeleton
 
-Create an Electron shell that:
+Implemented under `HITL/desktop/`. The Electron shell:
 
-- launches bundled Python backend
+- launches the Python backend sidecar
 - waits for `GET /health`
 - opens the local UI
 - shuts down backend on app close
 - stores uploads/outputs in app data, not inside read-only app resources
 
+Development runs still require local Python dependencies to be installed. The
+Python runtime, Java runtime, Ollama executable, and Llama model are handled in
+later packaging phases.
+
 ### Phase 2: Runtime Freezing
 
-Create a bundled Python environment containing:
+In progress. The Electron launcher can now use a frozen backend sidecar from
+`HITL/desktop/backend-dist/hitl-api/`, and `npm run build:backend` creates that
+sidecar with PyInstaller.
+
+The sidecar includes:
 
 - `spacy`
 - `wordfreq`
@@ -141,15 +149,34 @@ Create a bundled Python environment containing:
 - project `data/awl_word_forms.json`
 - `HITL` source files
 
+Still separate from the sidecar:
+
+- Java runtime for LanguageTool
+- Ollama executable
+- `llama3:8b` model files
+
 ### Phase 3: Local Model Packaging
+
+In progress. The Electron launcher now:
+
+- creates a private app-data Ollama model directory
+- sets `OLLAMA_MODELS` before starting the backend
+- chooses a private local Ollama port and sets `OLLAMA_HOST`
+- detects optional bundled Ollama executables from `runtime-assets/ollama/`
+- includes a helper script to copy the current platform Ollama executable into
+  the runtime asset folder
+- copies bundled `runtime-assets/ollama-models/` files into app data on first
+  launch when those files are present
+- detects optional bundled Java runtimes from `runtime-assets/jre/`
+- passes model, Ollama command, and model storage paths into the backend
+- exposes those paths through `/preflight`
 
 Package local inference:
 
 - include Ollama executable per platform
 - include model files for `llama3:8b` or approved replacement
-- set model storage path at app launch
-- start the local model server silently
-- confirm `GET /preflight` reports the model as available
+- include a private JRE per platform
+- confirm `GET /preflight` reports the bundled model as available on a clean machine
 
 ### Phase 4: Installer and Permissions
 
@@ -194,13 +221,10 @@ The packaged desktop shell should:
 
 ## Backend Changes Still Needed For Packaging
 
-- Make upload/output directories configurable by environment variable.
-- Make `HITL/Essays.xlsx` path configurable for bundled resources.
-- Make the API port configurable and pass it to the UI.
-- Add a backend shutdown endpoint for the desktop shell.
 - Add process-level logging to an app data log file.
-- Add model-runtime configuration for a bundled Ollama directory.
-- Add preflight fields for app bundle paths and disk space.
+- Bundle a private Java runtime for LanguageTool.
+- Add the actual Ollama executable and model files to the runtime asset folders.
+- Review and include license/notice files for bundled runtimes and model weights.
 
 ## Packaging Risks
 
@@ -209,8 +233,9 @@ The packaged desktop shell should:
 - LanguageTool requires Java, increasing bundle complexity.
 - Local model scoring can be slow on low-memory laptops.
 - Some systems may block localhost servers unless the app is signed/notarized.
-- LLM output can occasionally be malformed despite JSON mode; retry handling
-  should be improved before release.
+- LLM output can occasionally be malformed despite JSON mode; the scorer now
+  retries malformed JSON responses, but this should still be watched during the
+  experiment.
 
 ## Definition Of Packaging-Ready
 

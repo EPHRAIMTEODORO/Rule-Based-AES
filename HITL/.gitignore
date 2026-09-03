@@ -5,3 +5,15 @@ uploads/*
 !uploads/.gitkeep
 outputs/*
 !outputs/.gitkeep
+desktop/node_modules/
+desktop/backend-build/
+desktop/backend-dist/*
+!desktop/backend-dist/.gitkeep
+desktop/runtime-assets/ollama/*
+!desktop/runtime-assets/ollama/.gitkeep
+desktop/runtime-assets/jre/*
+!desktop/runtime-assets/jre/.gitkeep
+desktop/runtime-assets/ollama-models/*
+!desktop/runtime-assets/ollama-models/.gitkeep
+desktop/dist/
+desktop/out/

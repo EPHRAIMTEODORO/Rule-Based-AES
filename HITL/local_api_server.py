@@ -13,6 +13,7 @@ import json
 import mimetypes
 import shutil
 import sys
+import threading
 import uuid
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -21,10 +22,16 @@ from typing import Optional
 from urllib.parse import urlparse
 
 
-THIS_DIR = Path(__file__).resolve().parent
-PROJECT_DIR = THIS_DIR.parent
+if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+    PROJECT_DIR = Path(sys._MEIPASS)
+    THIS_DIR = PROJECT_DIR / "HITL"
+else:
+    THIS_DIR = Path(__file__).resolve().parent
+    PROJECT_DIR = THIS_DIR.parent
 if str(PROJECT_DIR) not in sys.path:
     sys.path.insert(0, str(PROJECT_DIR))
+if str(THIS_DIR) not in sys.path:
+    sys.path.insert(0, str(THIS_DIR))
 
 from HITL import (  # noqa: E402
     get_job_result,
@@ -33,14 +40,20 @@ from HITL import (  # noqa: E402
     start_job,
     update_job_decision,
 )
+import hybrid_llm_aes as scorer  # noqa: E402
 
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
+DEFAULT_MODEL = "llama3:8b"
+DEFAULT_OLLAMA_URL = "http://127.0.0.1:11434/api/chat"
+DEFAULT_OLLAMA_COMMAND = "ollama"
+DEFAULT_OLLAMA_STARTUP_TIMEOUT = 30.0
 UPLOAD_DIR = THIS_DIR / "uploads"
 OUTPUT_DIR = THIS_DIR / "outputs"
 UI_INDEX = THIS_DIR / "ui" / "index.html"
 SAMPLE_WORKBOOK = THIS_DIR / "Essays.xlsx"
+OLLAMA_MODELS_DIR: Optional[Path] = None
 ALLOWED_EXTENSIONS = {".xlsx"}
 ALLOWED_ORIGINS = {
     "http://127.0.0.1:8765",
@@ -129,6 +142,39 @@ def _optional_int(value: object) -> Optional[int]:
     return int(str(value))
 
 
+def configure_runtime_paths(
+    upload_dir: Optional[str] = None,
+    output_dir: Optional[str] = None,
+    sample_workbook: Optional[str] = None,
+    model: Optional[str] = None,
+    ollama_url: Optional[str] = None,
+    ollama_command: Optional[str] = None,
+    ollama_startup_timeout: Optional[float] = None,
+    ollama_models_dir: Optional[str] = None,
+) -> None:
+    """Configure writable and bundled resource paths for desktop launchers."""
+    global DEFAULT_MODEL, DEFAULT_OLLAMA_URL, DEFAULT_OLLAMA_COMMAND
+    global DEFAULT_OLLAMA_STARTUP_TIMEOUT, OLLAMA_MODELS_DIR
+    global UPLOAD_DIR, OUTPUT_DIR, SAMPLE_WORKBOOK
+
+    if upload_dir:
+        UPLOAD_DIR = Path(upload_dir).expanduser().resolve()
+    if output_dir:
+        OUTPUT_DIR = Path(output_dir).expanduser().resolve()
+    if sample_workbook:
+        SAMPLE_WORKBOOK = Path(sample_workbook).expanduser().resolve()
+    if model:
+        DEFAULT_MODEL = model
+    if ollama_url:
+        DEFAULT_OLLAMA_URL = ollama_url
+    if ollama_command:
+        DEFAULT_OLLAMA_COMMAND = ollama_command
+    if ollama_startup_timeout is not None:
+        DEFAULT_OLLAMA_STARTUP_TIMEOUT = ollama_startup_timeout
+    if ollama_models_dir:
+        OLLAMA_MODELS_DIR = Path(ollama_models_dir).expanduser().resolve()
+
+
 class HITLRequestHandler(BaseHTTPRequestHandler):
     """HTTP handler for the local HITL API."""
 
@@ -160,7 +206,18 @@ class HITLRequestHandler(BaseHTTPRequestHandler):
                 return
 
             if parsed.path == "/preflight":
-                _json_response(self, HTTPStatus.OK, run_preflight().to_dict())
+                _json_response(
+                    self,
+                    HTTPStatus.OK,
+                    run_preflight(
+                        model=DEFAULT_MODEL,
+                        ollama_url=DEFAULT_OLLAMA_URL,
+                        ollama_command=DEFAULT_OLLAMA_COMMAND,
+                        ollama_models_dir=OLLAMA_MODELS_DIR,
+                        upload_dir=UPLOAD_DIR,
+                        output_dir=OUTPUT_DIR,
+                    ).to_dict(),
+                )
                 return
 
             if len(path_parts) == 2 and path_parts[0] == "jobs":
@@ -206,6 +263,10 @@ class HITLRequestHandler(BaseHTTPRequestHandler):
         try:
             if parsed.path == "/sample-job":
                 self._create_sample_job()
+                return
+
+            if parsed.path == "/shutdown":
+                self._shutdown_server()
                 return
 
             if len(path_parts) == 3 and path_parts[0] == "jobs" and path_parts[2] == "decision":
@@ -262,6 +323,12 @@ class HITLRequestHandler(BaseHTTPRequestHandler):
         record = update_job_decision(job_id, int(payload["row_index"]), decision)
         _json_response(self, HTTPStatus.OK, {"record": record})
 
+    def _shutdown_server(self) -> None:
+        """Ask the local desktop API server to stop after responding."""
+        scorer.stop_ollama_if_started()
+        _json_response(self, HTTPStatus.OK, {"status": "stopping"})
+        threading.Thread(target=self.server.shutdown, daemon=True).start()
+
     def _create_sample_job(self) -> None:
         """Create a job from the packaged sample workbook."""
         if not SAMPLE_WORKBOOK.exists():
@@ -274,7 +341,10 @@ class HITLRequestHandler(BaseHTTPRequestHandler):
             essay_id_column="id",
             prompt_column="Topic",
             text_column="Essay",
-            model="llama3:8b",
+            model=DEFAULT_MODEL,
+            ollama_url=DEFAULT_OLLAMA_URL,
+            ollama_command=DEFAULT_OLLAMA_COMMAND,
+            ollama_startup_timeout=DEFAULT_OLLAMA_STARTUP_TIMEOUT,
             start_ollama=True,
             limit=1,
         )
@@ -300,7 +370,12 @@ class HITLRequestHandler(BaseHTTPRequestHandler):
             prompt_column=str(_field_value(form, "prompt_column", "Topic")),
             text_column=str(_field_value(form, "text_column", "Essay")),
             sheet_name=_field_value(form, "sheet_name") or None,
-            model=str(_field_value(form, "model", "llama3:8b")),
+            model=str(_field_value(form, "model", DEFAULT_MODEL)),
+            ollama_url=str(_field_value(form, "ollama_url", DEFAULT_OLLAMA_URL)),
+            ollama_command=str(_field_value(form, "ollama_command", DEFAULT_OLLAMA_COMMAND)),
+            ollama_startup_timeout=float(
+                _field_value(form, "ollama_startup_timeout", DEFAULT_OLLAMA_STARTUP_TIMEOUT)
+            ),
             start_ollama=str(_field_value(form, "start_ollama", "true")).lower() != "false",
             limit=_optional_int(_field_value(form, "limit")),
         )
@@ -325,7 +400,13 @@ class HITLRequestHandler(BaseHTTPRequestHandler):
             prompt_column=payload.get("prompt_column", "Topic"),
             text_column=payload.get("text_column", "Essay"),
             sheet_name=payload.get("sheet_name") or None,
-            model=payload.get("model", "llama3:8b"),
+            model=payload.get("model", DEFAULT_MODEL),
+            ollama_url=payload.get("ollama_url", DEFAULT_OLLAMA_URL),
+            ollama_command=payload.get("ollama_command", DEFAULT_OLLAMA_COMMAND),
+            ollama_startup_timeout=payload.get(
+                "ollama_startup_timeout",
+                DEFAULT_OLLAMA_STARTUP_TIMEOUT,
+            ),
             start_ollama=payload.get("start_ollama", True) is not False,
             limit=payload.get("limit"),
         )
@@ -358,14 +439,34 @@ def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the local HITL API server.")
     parser.add_argument("--host", default=DEFAULT_HOST)
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
+    parser.add_argument("--upload-dir", default=None)
+    parser.add_argument("--output-dir", default=None)
+    parser.add_argument("--sample-workbook", default=None)
+    parser.add_argument("--model", default=DEFAULT_MODEL)
+    parser.add_argument("--ollama-url", default=DEFAULT_OLLAMA_URL)
+    parser.add_argument("--ollama-command", default=DEFAULT_OLLAMA_COMMAND)
+    parser.add_argument("--ollama-startup-timeout", type=float, default=DEFAULT_OLLAMA_STARTUP_TIMEOUT)
+    parser.add_argument("--ollama-models-dir", default=None)
     return parser.parse_args()
 
 
 def main() -> None:
     """Run the local HTTP API server."""
     args = _parse_args()
+    configure_runtime_paths(
+        upload_dir=args.upload_dir,
+        output_dir=args.output_dir,
+        sample_workbook=args.sample_workbook,
+        model=args.model,
+        ollama_url=args.ollama_url,
+        ollama_command=args.ollama_command,
+        ollama_startup_timeout=args.ollama_startup_timeout,
+        ollama_models_dir=args.ollama_models_dir,
+    )
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    if OLLAMA_MODELS_DIR:
+        OLLAMA_MODELS_DIR.mkdir(parents=True, exist_ok=True)
     server = ThreadingHTTPServer((args.host, args.port), HITLRequestHandler)
     print(f"HITL local API listening on http://{args.host}:{args.port}", flush=True)
     try:
@@ -373,6 +474,7 @@ def main() -> None:
     except KeyboardInterrupt:
         print("\nHITL local API stopped.", flush=True)
     finally:
+        scorer.stop_ollama_if_started()
         server.server_close()
 
 

@@ -1,0 +1,97 @@
+{
+  "name": "hitl-academic-writing-scorer-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Offline Electron shell for the HITL Academic Writing Scorer.",
+  "author": "HITL Academic Writing Scorer",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "build:backend": "node scripts/build-python-sidecar.cjs",
+    "prepare:runtimes": "node scripts/prepare-runtime-assets.cjs",
+    "dist": "electron-builder",
+    "dist:with-backend": "npm run build:backend && electron-builder",
+    "dist:mac": "electron-builder --mac",
+    "dist:win": "electron-builder --win",
+    "dist:linux": "electron-builder --linux"
+  },
+  "devDependencies": {
+    "electron": "^32.3.3",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "edu.local.hitl-academic-writing-scorer",
+    "productName": "HITL Academic Writing Scorer",
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "backend-dist",
+        "to": "backend",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "../",
+        "to": "HITL",
+        "filter": [
+          "**/*",
+          "!desktop/**",
+          "!uploads/**",
+          "!outputs/**",
+          "!__pycache__/**",
+          "!*.pyc"
+        ]
+      },
+      {
+        "from": "../../data",
+        "to": "data",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "runtime-assets/ollama",
+        "to": "ollama",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "runtime-assets/jre",
+        "to": "jre",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "runtime-assets/ollama-models",
+        "to": "ollama-models",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.education",
+      "target": [
+        "dmg"
+      ]
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Education"
+    }
+  }
+}

@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 import re
 import subprocess
 import sys
@@ -68,6 +69,8 @@ LLM_FIELD_NAMES = [
     "recommended_score",
     "justification",
 ]
+LLM_JSON_RETRIES = 2
+_OLLAMA_PROCESS: Optional[subprocess.Popen] = None
 
 INTEGER_TRAIT_FIELDS = [
     "organization",
@@ -239,6 +242,8 @@ def is_ollama_running(ollama_url: str, timeout_seconds: float = 2.0) -> bool:
 
 def start_ollama_if_needed(args: argparse.Namespace) -> None:
     """Start `ollama serve` when the configured Ollama API is not reachable."""
+    global _OLLAMA_PROCESS
+
     if is_ollama_running(args.ollama_url):
         if not args.quiet:
             print("Ollama is already running.", flush=True)
@@ -247,13 +252,23 @@ def start_ollama_if_needed(args: argparse.Namespace) -> None:
     if not args.quiet:
         print("Starting Ollama server...", flush=True)
 
+    parsed_url = urllib.parse.urlparse(args.ollama_url)
+    ollama_env = os.environ.copy()
+    if parsed_url.hostname and "OLLAMA_HOST" not in ollama_env:
+        host = parsed_url.hostname
+        if parsed_url.port:
+            host = f"{host}:{parsed_url.port}"
+        ollama_env["OLLAMA_HOST"] = host
+
     try:
         process = subprocess.Popen(
             [args.ollama_command, "serve"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             start_new_session=True,
+            env=ollama_env,
         )
+        _OLLAMA_PROCESS = process
     except FileNotFoundError as exc:
         raise RuntimeError(
             "Could not find the Ollama command. Install Ollama or pass "
@@ -275,6 +290,25 @@ def start_ollama_if_needed(args: argparse.Namespace) -> None:
         f"Check that `{args.ollama_command} serve` works and that "
         f"{ollama_health_url(args.ollama_url)} is accessible."
     )
+
+
+def stop_ollama_if_started(timeout_seconds: float = 5.0) -> None:
+    """Stop the Ollama server process if this scorer started it."""
+    global _OLLAMA_PROCESS
+
+    process = _OLLAMA_PROCESS
+    if process is None or process.poll() is not None:
+        _OLLAMA_PROCESS = None
+        return
+
+    process.terminate()
+    try:
+        process.wait(timeout=timeout_seconds)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=timeout_seconds)
+    finally:
+        _OLLAMA_PROCESS = None
 
 
 def call_ollama_chat(
@@ -299,34 +333,45 @@ def call_ollama_chat(
         },
     }
     data = json.dumps(payload).encode("utf-8")
-    request = urllib.request.Request(
-        ollama_url,
-        data=data,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
 
-    try:
-        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
-            response_payload = json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        error_body = exc.read().decode("utf-8", errors="replace")
-        raise RuntimeError(
-            "Ollama returned an HTTP error. Make sure the model name matches "
-            f"`ollama list`. Requested model: {model}. "
-            f"HTTP {exc.code}: {error_body}"
-        ) from exc
-    except urllib.error.URLError as exc:
-        raise RuntimeError(
-            "Could not reach Ollama. Make sure Ollama is running and the model is "
-            f"available with: ollama run {model}"
-        ) from exc
+    last_json_error: Optional[Exception] = None
+    for attempt in range(LLM_JSON_RETRIES + 1):
+        request = urllib.request.Request(
+            ollama_url,
+            data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
 
-    content = response_payload.get("message", {}).get("content", "")
-    if not content:
-        raise ValueError(f"Ollama returned no message content: {response_payload}")
+        try:
+            with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+                response_payload = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            error_body = exc.read().decode("utf-8", errors="replace")
+            raise RuntimeError(
+                "Ollama returned an HTTP error. Make sure the model name matches "
+                f"`ollama list`. Requested model: {model}. "
+                f"HTTP {exc.code}: {error_body}"
+            ) from exc
+        except urllib.error.URLError as exc:
+            raise RuntimeError(
+                "Could not reach Ollama. Make sure Ollama is running and the model is "
+                f"available with: ollama run {model}"
+            ) from exc
 
-    return extract_json_object(content)
+        content = response_payload.get("message", {}).get("content", "")
+        if not content:
+            last_json_error = ValueError(f"Ollama returned no message content: {response_payload}")
+        else:
+            try:
+                return extract_json_object(content)
+            except ValueError as exc:
+                last_json_error = exc
+
+        if attempt < LLM_JSON_RETRIES:
+            time.sleep(0.5)
+
+    raise ValueError(f"Ollama did not return valid rubric JSON after retries: {last_json_error}")
 
 
 def normalize_llm_result(raw_result: dict, essay_id: str) -> dict:

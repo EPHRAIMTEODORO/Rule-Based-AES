@@ -222,6 +222,20 @@ For browser-style prototype UIs, run the local HTTP API:
 python "HITL/local_api_server.py"
 ```
 
+For the Electron desktop shell:
+
+```bash
+cd HITL/desktop
+npm install
+npm start
+```
+
+The Electron shell starts the local Python API server automatically, waits for
+`/health`, opens the dashboard, stores uploads/outputs in the app-data folder,
+and stops the backend when the desktop app exits. Packaged builds now use a
+PyInstaller Python sidecar. They still need bundled Java, Ollama, and model
+assets before they are fully self-contained for end users.
+
 The default server listens on `http://127.0.0.1:8765` and serves the prototype
 UI at that same address.
 

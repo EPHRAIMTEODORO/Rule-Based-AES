@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import json
 import shutil
 import subprocess
@@ -16,10 +17,15 @@ from pathlib import Path
 from typing import Optional
 
 
-THIS_DIR = Path(__file__).resolve().parent
-PROJECT_DIR = THIS_DIR.parent
+if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+    PROJECT_DIR = Path(sys._MEIPASS)
+    THIS_DIR = PROJECT_DIR / "HITL"
+else:
+    THIS_DIR = Path(__file__).resolve().parent
+    PROJECT_DIR = THIS_DIR.parent
 DEFAULT_OLLAMA_URL = "http://127.0.0.1:11434/api/chat"
 DEFAULT_MODEL = "llama3:8b"
+DEFAULT_MINIMUM_FREE_GB = 8.0
 REQUIRED_PACKAGES = [
     ("spacy", "spacy"),
     ("wordfreq", "wordfreq"),
@@ -147,7 +153,9 @@ def _check_nltk_resource(resource_name: str) -> PreflightCheck:
 
 def _check_java() -> PreflightCheck:
     """Check Java availability for LanguageTool."""
-    java_path = shutil.which("java")
+    java_home = os.environ.get("JAVA_HOME")
+    java_executable = "java.exe" if sys.platform == "win32" else "java"
+    java_path = str(Path(java_home) / "bin" / java_executable) if java_home else shutil.which("java")
     if not java_path:
         return _check("java", False, "Java is missing; LanguageTool needs Java")
 
@@ -196,6 +204,33 @@ def _check_writable_dir(name: str, path: Path) -> PreflightCheck:
     return _check(name, True, f"{path} is writable", str(path))
 
 
+def _check_disk_space(path: Path, minimum_free_gb: float) -> PreflightCheck:
+    """Check available disk space for local model/runtime storage."""
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+        usage = shutil.disk_usage(path)
+    except Exception as exc:
+        return _check(
+            "disk_space",
+            False,
+            f"Could not inspect free disk space at {path}",
+            f"{type(exc).__name__}: {exc}",
+        )
+
+    free_gb = usage.free / (1024**3)
+    ok = free_gb >= minimum_free_gb
+    return _check(
+        "disk_space",
+        ok,
+        (
+            f"{free_gb:.1f} GB free for local model storage"
+            if ok
+            else f"{free_gb:.1f} GB free; at least {minimum_free_gb:.1f} GB recommended"
+        ),
+        str(path),
+    )
+
+
 def _ollama_tags_url(ollama_url: str) -> str:
     """Convert an Ollama chat API URL into the local tags URL."""
     parsed_url = urllib.parse.urlparse(ollama_url)
@@ -204,7 +239,8 @@ def _ollama_tags_url(ollama_url: str) -> str:
 
 def _check_ollama_executable(ollama_command: str) -> PreflightCheck:
     """Check that the Ollama executable can be found."""
-    found = shutil.which(ollama_command)
+    command_path = Path(ollama_command).expanduser()
+    found = str(command_path) if command_path.exists() else shutil.which(ollama_command)
     return _check(
         "ollama_executable",
         found is not None,
@@ -267,9 +303,16 @@ def run_preflight(
     model: str = DEFAULT_MODEL,
     ollama_url: str = DEFAULT_OLLAMA_URL,
     ollama_command: str = "ollama",
+    ollama_models_dir: Optional[Path] = None,
+    upload_dir: Optional[Path] = None,
+    output_dir: Optional[Path] = None,
     timeout_seconds: float = 2.0,
+    minimum_free_gb: float = DEFAULT_MINIMUM_FREE_GB,
 ) -> PreflightResult:
     """Run all offline readiness checks."""
+    model_storage_dir = ollama_models_dir or Path(os.environ.get("OLLAMA_MODELS", THIS_DIR / "models" / "ollama"))
+    runtime_upload_dir = upload_dir or THIS_DIR / "uploads"
+    runtime_output_dir = output_dir or THIS_DIR / "outputs"
     checks: list[PreflightCheck] = [
         _check_python_version(),
         *_check_python_packages(),
@@ -279,8 +322,10 @@ def run_preflight(
         _check_java(),
         _check_path_exists("sample_workbook", THIS_DIR / "Essays.xlsx", "Sample workbook"),
         _check_path_exists("awl_data", PROJECT_DIR / "data" / "awl_word_forms.json", "AWL data"),
-        _check_writable_dir("uploads_writable", THIS_DIR / "uploads"),
-        _check_writable_dir("outputs_writable", THIS_DIR / "outputs"),
+        _check_writable_dir("uploads_writable", runtime_upload_dir),
+        _check_writable_dir("outputs_writable", runtime_output_dir),
+        _check_writable_dir("ollama_models_writable", model_storage_dir),
+        _check_disk_space(model_storage_dir, minimum_free_gb),
         _check_ollama_executable(ollama_command),
         _check_ollama_server(ollama_url, timeout_seconds),
         _check_ollama_model(model, ollama_url, timeout_seconds),
@@ -296,7 +341,11 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument("--ollama-url", default=DEFAULT_OLLAMA_URL)
     parser.add_argument("--ollama-command", default="ollama")
+    parser.add_argument("--ollama-models-dir", type=Path)
+    parser.add_argument("--upload-dir", type=Path)
+    parser.add_argument("--output-dir", type=Path)
     parser.add_argument("--timeout-seconds", type=float, default=2.0)
+    parser.add_argument("--minimum-free-gb", type=float, default=DEFAULT_MINIMUM_FREE_GB)
     parser.add_argument("--json", action="store_true", help="Print JSON output.")
     return parser.parse_args()
 
@@ -308,7 +357,11 @@ def main() -> None:
         model=args.model,
         ollama_url=args.ollama_url,
         ollama_command=args.ollama_command,
+        ollama_models_dir=args.ollama_models_dir,
+        upload_dir=args.upload_dir,
+        output_dir=args.output_dir,
         timeout_seconds=args.timeout_seconds,
+        minimum_free_gb=args.minimum_free_gb,
     )
     if args.json:
         print(json.dumps(result.to_dict(), indent=2), flush=True)
