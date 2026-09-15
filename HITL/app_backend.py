@@ -23,6 +23,7 @@ try:
     from .hitl_processor import (
         HUMAN_DECISION_FIELDNAMES,
         ProcessingResult,
+        load_completed_workbook,
         process_workbook,
         write_completed_workbook,
     )
@@ -30,6 +31,7 @@ except ImportError:  # Allows `python HITL/app_backend.py ...` during local test
     from hitl_processor import (
         HUMAN_DECISION_FIELDNAMES,
         ProcessingResult,
+        load_completed_workbook,
         process_workbook,
         write_completed_workbook,
     )
@@ -39,6 +41,7 @@ HITL_DIR = Path(__file__).resolve().parent
 DEFAULT_OUTPUT_DIR = HITL_DIR / "outputs"
 JOB_STATUSES = {"queued", "running", "completed", "failed"}
 DECISION_FIELDNAMES = set(HUMAN_DECISION_FIELDNAMES)
+REVIEW_REQUIRED_SCORES = {3.5, 4.5, 5.5}
 
 
 @dataclass
@@ -114,6 +117,49 @@ def _normalize_final_score(value: object) -> object:
         raise ValueError("Rater_Final_Score must be a finite number from 1 to 6.")
     numeric = max(1.0, min(6.0, numeric))
     return round(numeric * 2) / 2
+
+
+def _record_score(value: object) -> Optional[float]:
+    """Return a finite numeric score from a result record when present."""
+    if value in {None, ""}:
+        return None
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return None
+    return numeric if math.isfinite(numeric) else None
+
+
+def _placement_for_score(value: object) -> str:
+    """Map a final score to the approved placement label."""
+    score = _record_score(value)
+    if score is None:
+        return ""
+    if score <= 3:
+        return "Pre-EIL"
+    if score == 4:
+        return "EIL 1"
+    if score == 5:
+        return "EIL 2"
+    if score == 6:
+        return "Test Out"
+    return ""
+
+
+def _validate_decision_for_record(record: dict, decision: dict) -> None:
+    """Reject unresolved borderline model scores before saving."""
+    model_score = _record_score(record.get("llm_recommended_score"))
+    final_score = _record_score(decision.get("Rater_Final_Score"))
+    if model_score not in REVIEW_REQUIRED_SCORES or final_score is None:
+        return
+
+    valid_scores = {math.floor(model_score), math.ceil(model_score)}
+    if final_score not in valid_scores:
+        lower_score, upper_score = sorted(valid_scores)
+        raise ValueError(
+            f"Model score {model_score:g} must be finalized as "
+            f"{lower_score:g} or {upper_score:g}."
+        )
 
 
 def _normalize_decision_payload(decision: dict) -> dict:
@@ -257,6 +303,51 @@ def start_job(
     return job_id
 
 
+def load_review_workbook(
+    input_path: str,
+    output_dir: Union[str, Path] = DEFAULT_OUTPUT_DIR,
+) -> str:
+    """Load a completed workbook as a review-ready job and return its job ID."""
+    job_id, output_path = _create_output_path(input_path, output_dir)
+    job = AppJob(
+        job_id=job_id,
+        input_path=str(input_path),
+        output_path=output_path,
+        status="running",
+        progress={"stage": "loading", "message": "Loading completed workbook"},
+    )
+
+    with _JOBS_LOCK:
+        _JOBS[job_id] = job
+
+    try:
+        result = load_completed_workbook(input_path, output_path)
+    except Exception as exc:
+        _set_job_state(
+            job_id,
+            status="failed",
+            error=str(exc),
+            error_type=type(exc).__name__,
+            traceback=traceback.format_exc(),
+            progress={"stage": "failed", "message": str(exc)},
+        )
+        raise
+
+    result_payload = _json_safe(result.to_dict())
+    _set_job_state(
+        job_id,
+        status="completed",
+        result=result_payload,
+        progress={
+            "stage": "complete",
+            "message": "Completed workbook loaded for review",
+            "rows_processed": result.rows_processed,
+            "output_path": result.output_path,
+        },
+    )
+    return job_id
+
+
 def get_job_status(job_id: str) -> dict:
     """Return current job status for UI polling."""
     with _JOBS_LOCK:
@@ -300,6 +391,10 @@ def update_job_decision(job_id: str, row_index: int, decision: dict) -> dict:
             raise IndexError(f"row_index {row_index} is outside the result rows.")
 
         normalized_decision = _normalize_decision_payload(decision)
+        _validate_decision_for_record(records[row_index], normalized_decision)
+        placement = _placement_for_score(normalized_decision.get("Rater_Final_Score"))
+        if placement:
+            normalized_decision["Rater_Final_Placement"] = placement
         records[row_index].update(normalized_decision)
         for fieldname in HUMAN_DECISION_FIELDNAMES:
             if fieldname not in columns:

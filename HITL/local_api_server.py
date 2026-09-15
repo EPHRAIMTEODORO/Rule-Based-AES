@@ -36,6 +36,7 @@ if str(THIS_DIR) not in sys.path:
 from HITL import (  # noqa: E402
     get_job_result,
     get_job_status,
+    load_review_workbook,
     run_preflight,
     start_job,
     update_job_decision,
@@ -269,6 +270,10 @@ class HITLRequestHandler(BaseHTTPRequestHandler):
                 self._shutdown_server()
                 return
 
+            if parsed.path == "/review-workbook":
+                self._load_review_workbook()
+                return
+
             if len(path_parts) == 3 and path_parts[0] == "jobs" and path_parts[2] == "decision":
                 self._update_job_decision(path_parts[1])
                 return
@@ -381,6 +386,26 @@ class HITLRequestHandler(BaseHTTPRequestHandler):
         )
         status = _status_with_urls(get_job_status(job_id))
         _json_response(self, HTTPStatus.ACCEPTED, status)
+
+    def _load_review_workbook(self) -> None:
+        """Load an already-completed workbook into the review dashboard."""
+        content_type = self.headers.get("Content-Type", "")
+        if not content_type.startswith("multipart/form-data"):
+            raise ValueError("Review workbook uploads must use multipart/form-data.")
+
+        form = cgi.FieldStorage(
+            fp=self.rfile,
+            headers=self.headers,
+            environ={
+                "REQUEST_METHOD": "POST",
+                "CONTENT_TYPE": content_type,
+                "CONTENT_LENGTH": self.headers.get("Content-Length", "0"),
+            },
+        )
+        input_path = _save_uploaded_file(form)
+        job_id = load_review_workbook(input_path=input_path, output_dir=OUTPUT_DIR)
+        status = _status_with_urls(get_job_status(job_id))
+        _json_response(self, HTTPStatus.OK, status)
 
     def _create_job_from_json(self) -> None:
         """Create a job from an already-local workbook path."""

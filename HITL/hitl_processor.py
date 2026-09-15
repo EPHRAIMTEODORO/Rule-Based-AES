@@ -9,6 +9,7 @@ records that the UI can render.
 from __future__ import annotations
 
 import argparse
+import math
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -42,6 +43,12 @@ HUMAN_DECISION_FIELDNAMES = [
     "Reason_Notes",
     "Decision_Updated_At",
 ]
+COMPLETED_SCORE_MARKERS = {
+    "llm_recommended_score",
+    "LLM_Organization_Coherence",
+    "aes_score",
+}
+REVIEW_REQUIRED_SCORES = {3.5, 4.5, 5.5}
 
 ProgressCallback = Callable[[dict], None]
 
@@ -233,15 +240,151 @@ def write_completed_workbook(
     _write_completed_workbook(output_path, fieldnames, rows)
 
 
+def load_completed_workbook(
+    input_path: str,
+    output_path: str,
+    sheet_name: str = "Completed_Scores",
+) -> ProcessingResult:
+    """Load an already-scored workbook for human review.
+
+    The review UI saves decisions back through the same completed-workbook
+    writer used by fresh processing jobs, so this loader normalizes the workbook
+    into the same in-memory shape and ensures decision columns exist.
+    """
+    workbook = load_workbook(input_path, read_only=True, data_only=True)
+    worksheet = (
+        workbook[sheet_name]
+        if sheet_name in workbook.sheetnames
+        else workbook.worksheets[0]
+    )
+    rows = worksheet.iter_rows(values_only=True)
+
+    try:
+        header_row = next(rows)
+    except StopIteration as exc:
+        workbook.close()
+        raise ValueError("Completed workbook sheet is empty.") from exc
+
+    kept_columns = [
+        (index, scorer.normalize_cell(value))
+        for index, value in enumerate(header_row)
+        if not _is_blank_header(value)
+    ]
+    if not kept_columns:
+        workbook.close()
+        raise ValueError("Completed workbook must include a header row.")
+
+    fieldnames = [fieldname for _, fieldname in kept_columns]
+    if not any(fieldname in fieldnames for fieldname in COMPLETED_SCORE_MARKERS):
+        workbook.close()
+        raise ValueError(
+            "Review upload must be a completed workbook. Process the raw workbook first."
+        )
+
+    records = []
+    for row_values in rows:
+        if all(value is None for value in row_values):
+            continue
+
+        record = {}
+        for source_index, fieldname in kept_columns:
+            value = row_values[source_index] if source_index < len(row_values) else ""
+            record[fieldname] = scorer.normalize_cell(value)
+        records.append(_with_initial_decision_fields(record))
+
+    workbook.close()
+
+    if not records:
+        raise ValueError("Completed workbook does not contain any essay rows.")
+
+    for fieldname in HUMAN_DECISION_FIELDNAMES:
+        if fieldname not in fieldnames:
+            fieldnames.append(fieldname)
+
+    _write_completed_workbook(output_path, fieldnames, records)
+    return ProcessingResult(
+        input_path=str(input_path),
+        output_path=str(output_path),
+        rows_processed=len(records),
+        columns=fieldnames,
+        records=records,
+    )
+
+
+def _score_value(value: object) -> Optional[float]:
+    """Return a finite numeric score when available."""
+    if value in {None, ""}:
+        return None
+    try:
+        score = float(value)
+    except (TypeError, ValueError):
+        return None
+    return score if math.isfinite(score) else None
+
+
+def _score_label(score: float) -> str:
+    """Return a compact score label for workbook decision fields."""
+    return str(int(score)) if score.is_integer() else str(score)
+
+
+def _placement_for_final_score(score: float) -> str:
+    """Map final 1-6 scores to the approved placement labels."""
+    if score <= 3:
+        return "Pre-EIL"
+    if score == 4:
+        return "EIL 1"
+    if score == 5:
+        return "EIL 2"
+    if score == 6:
+        return "Test Out"
+    return ""
+
+
+def _borderline_note(score: float) -> str:
+    """Return rater guidance for scores that need a whole-score decision."""
+    lower_score = int(score)
+    upper_score = lower_score + 1
+    return (
+        f"Borderline model score {_score_label(score)}: choose "
+        f"{lower_score} or {upper_score} as the final score."
+    )
+
+
 def _with_initial_decision_fields(row: dict) -> dict:
     """Add default human decision fields to a scored row."""
+    score = _score_value(row.get("llm_recommended_score"))
+    if row.get("Rater_Final_Score"):
+        final_score = row.get("Rater_Final_Score", "")
+        final_placement = row.get("Rater_Final_Placement", "")
+        action = row.get("Rater_Action", "")
+        status = row.get("Decision_Status") or "Finalized"
+        notes = row.get("Reason_Notes", "")
+    elif score in REVIEW_REQUIRED_SCORES:
+        final_score = ""
+        final_placement = ""
+        action = "Resolve borderline score"
+        status = row.get("Decision_Status") or "Review"
+        notes = row.get("Reason_Notes") or _borderline_note(score)
+    elif score is not None:
+        final_score = _score_label(score)
+        final_placement = _placement_for_final_score(score)
+        action = "Accept system score"
+        status = row.get("Decision_Status") or "Finalized"
+        notes = row.get("Reason_Notes") or "No notes needed"
+    else:
+        final_score = ""
+        final_placement = ""
+        action = ""
+        status = row.get("Decision_Status") or "Pending"
+        notes = row.get("Reason_Notes", "")
+
     return {
         **row,
-        "Rater_Final_Score": row.get("Rater_Final_Score", ""),
-        "Rater_Final_Placement": row.get("Rater_Final_Placement", ""),
-        "Rater_Action": row.get("Rater_Action", ""),
-        "Decision_Status": row.get("Decision_Status") or "Pending",
-        "Reason_Notes": row.get("Reason_Notes", ""),
+        "Rater_Final_Score": final_score,
+        "Rater_Final_Placement": final_placement,
+        "Rater_Action": action,
+        "Decision_Status": status,
+        "Reason_Notes": notes,
         "Decision_Updated_At": row.get("Decision_Updated_At", ""),
     }
 

@@ -5,10 +5,11 @@ from .app_backend import (
     get_job_result,
     get_job_status,
     list_jobs,
+    load_review_workbook,
     start_job,
     update_job_decision,
 )
-from .hitl_processor import ProcessingResult, process_workbook
+from .hitl_processor import ProcessingResult, load_completed_workbook, process_workbook
 from .preflight import PreflightResult, run_preflight
 
 __all__ = [
@@ -18,6 +19,8 @@ __all__ = [
     "get_job_result",
     "get_job_status",
     "list_jobs",
+    "load_completed_workbook",
+    "load_review_workbook",
     "process_workbook",
     "run_preflight",
     "start_job",

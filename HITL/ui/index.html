@@ -106,7 +106,7 @@
 
     .setup-band {
       display: grid;
-      grid-template-columns: minmax(320px, 1.1fr) minmax(360px, 1.4fr) minmax(260px, 0.9fr);
+      grid-template-columns: minmax(380px, 1.2fr) minmax(320px, 0.9fr) minmax(260px, 0.8fr);
       gap: 12px;
       padding: 12px 24px;
       border-bottom: 1px solid var(--line);
@@ -125,12 +125,47 @@
     }
 
     .upload-panel,
+    .review-upload-panel,
     .status-panel,
     .readiness-panel {
       padding: 12px;
       display: grid;
       gap: 10px;
       align-content: start;
+    }
+
+    .workflow-card {
+      padding: 12px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .mode-tabs {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      overflow: hidden;
+      background: var(--line);
+    }
+
+    .mode-tab {
+      min-height: 38px;
+      border: none;
+      border-radius: 0;
+      background: var(--panel);
+      color: var(--muted);
+    }
+
+    .mode-tab.active {
+      background: var(--accent);
+      color: #ffffff;
+    }
+
+    .workflow-panel {
+      display: grid;
+      gap: 10px;
     }
 
     .panel-heading {
@@ -695,6 +730,16 @@
       padding: 10px;
     }
 
+    .metric-item.has-help {
+      position: relative;
+      cursor: help;
+      outline: none;
+    }
+
+    .metric-item.has-help:focus {
+      box-shadow: inset 3px 0 0 var(--accent), 0 0 0 2px rgba(15, 118, 110, 0.16);
+    }
+
     .trait-item span,
     .metric-item span {
       color: var(--muted);
@@ -716,6 +761,82 @@
     .metric-grid.compact .metric-item strong {
       font-size: 18px;
       line-height: 1.15;
+    }
+
+    .metric-help {
+      position: absolute;
+      left: 10px;
+      bottom: calc(100% + 8px);
+      z-index: 30;
+      width: max-content;
+      min-width: 220px;
+      max-width: min(300px, calc(100vw - 40px));
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--panel);
+      color: var(--ink);
+      box-shadow: 0 12px 28px rgba(16, 24, 40, 0.14);
+      opacity: 0;
+      transform: translateY(4px);
+      pointer-events: none;
+      transition: opacity 140ms ease, transform 140ms ease;
+    }
+
+    .metric-help strong {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 13px;
+      line-height: 1.25;
+      color: var(--text);
+    }
+
+    .metric-help ul {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: grid;
+      gap: 4px;
+    }
+
+    .metric-help li {
+      display: flex;
+      justify-content: space-between;
+      gap: 14px;
+      color: var(--ink);
+      font-size: 12px;
+      line-height: 1.35;
+      white-space: nowrap;
+    }
+
+    .metric-help li span:first-child {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      line-height: inherit;
+      text-transform: none;
+    }
+
+    .metric-help li span:last-child {
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 750;
+      line-height: inherit;
+      text-transform: none;
+    }
+
+    .metric-help-note {
+      margin-top: 7px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .metric-item.has-help:hover .metric-help,
+    .metric-item.has-help:focus .metric-help,
+    .metric-item.has-help:focus-within .metric-help {
+      opacity: 1;
+      transform: translateY(0);
     }
 
     .model-panel {
@@ -790,6 +911,17 @@
       min-height: 72px;
       align-items: flex-start;
       white-space: pre-wrap;
+    }
+
+    .decision-hint {
+      padding: 8px 10px;
+      border: 1px solid #e9c772;
+      border-radius: 6px;
+      background: #fff8ed;
+      color: var(--warning);
+      font-size: 13px;
+      font-weight: 700;
+      line-height: 1.4;
     }
 
     .save-decision {
@@ -917,6 +1049,13 @@
         grid-template-columns: 1fr;
       }
 
+      .metric-help {
+        left: 8px;
+        right: 8px;
+        width: auto;
+        min-width: 0;
+      }
+
       .essay-title-row {
         flex-direction: column;
       }
@@ -940,33 +1079,53 @@
     </header>
 
     <section id="setup-band" class="setup-band" aria-label="Workbook processing">
-      <form id="upload-form" class="panel upload-panel">
-        <div class="panel-heading">
-          <h2>Workbook</h2>
+      <section class="panel workflow-card" aria-label="Workbook workflow">
+        <div class="mode-tabs" role="tablist" aria-label="Workflow">
+          <button id="process-mode-button" class="mode-tab active" type="button">Process Workbook</button>
+          <button id="review-mode-button" class="mode-tab" type="button">Review Workbook</button>
         </div>
-        <div class="field">
-          <label for="workbook-file">Upload</label>
-          <input id="workbook-file" name="file" type="file" accept=".xlsx" required>
-        </div>
-        <div class="field-row">
-          <div class="field">
-            <label for="essay-id-column">Student ID</label>
-            <input id="essay-id-column" name="essay_id_column" value="Student ID" autocomplete="off">
+
+        <form id="upload-form" class="workflow-panel upload-panel">
+          <div class="panel-heading">
+            <h2>Process Raw Workbook</h2>
           </div>
           <div class="field">
-            <label for="prompt-column">Prompt</label>
-            <input id="prompt-column" name="prompt_column" value="Topic" autocomplete="off">
+            <label for="workbook-file">Upload</label>
+            <input id="workbook-file" name="file" type="file" accept=".xlsx" required>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label for="essay-id-column">Student ID</label>
+              <input id="essay-id-column" name="essay_id_column" value="Student ID" autocomplete="off">
+            </div>
+            <div class="field">
+              <label for="prompt-column">Prompt</label>
+              <input id="prompt-column" name="prompt_column" value="Topic" autocomplete="off">
+            </div>
+            <div class="field">
+              <label for="text-column">Essay</label>
+              <input id="text-column" name="text_column" value="Essay" autocomplete="off">
+            </div>
+          </div>
+          <div class="button-row">
+            <button id="start-button" type="submit">Process</button>
+            <button id="sample-button" class="secondary" type="button">Sample</button>
+          </div>
+        </form>
+
+        <form id="review-upload-form" class="workflow-panel review-upload-panel hidden">
+          <div class="panel-heading">
+            <h2>Load Completed Workbook</h2>
           </div>
           <div class="field">
-            <label for="text-column">Essay</label>
-            <input id="text-column" name="text_column" value="Essay" autocomplete="off">
+            <label for="review-workbook-file">Completed Workbook</label>
+            <input id="review-workbook-file" name="file" type="file" accept=".xlsx" required>
           </div>
-        </div>
-        <div class="button-row">
-          <button id="start-button" type="submit">Process</button>
-          <button id="sample-button" class="secondary" type="button">Sample</button>
-        </div>
-      </form>
+          <div class="button-row">
+            <button id="load-review-button" type="submit">Open Review</button>
+          </div>
+        </form>
+      </section>
 
       <section class="panel status-panel" aria-label="Job status">
         <div class="panel-heading">
@@ -1111,6 +1270,7 @@
                 <label for="rater-final-score">Final Score</label>
                 <select id="rater-final-score"></select>
               </div>
+              <div id="score-choice-hint" class="decision-hint hidden"></div>
               <div class="field">
                 <label for="rater-final-placement">Placement</label>
                 <div id="rater-final-placement" class="readonly-value">Choose a final score</div>
@@ -1145,6 +1305,11 @@
       const fileInput = document.getElementById("workbook-file");
       const startButton = document.getElementById("start-button");
       const sampleButton = document.getElementById("sample-button");
+      const reviewUploadForm = document.getElementById("review-upload-form");
+      const reviewFileInput = document.getElementById("review-workbook-file");
+      const loadReviewButton = document.getElementById("load-review-button");
+      const processModeButton = document.getElementById("process-mode-button");
+      const reviewModeButton = document.getElementById("review-mode-button");
       const setupBand = document.getElementById("setup-band");
       const setupToggle = document.getElementById("setup-toggle");
       const serverDot = document.getElementById("server-dot");
@@ -1193,6 +1358,7 @@
       const raterActionControl = document.getElementById("rater-action");
       const decisionStatusControl = document.getElementById("decision-status");
       const reasonNotesControl = document.getElementById("reason-notes");
+      const scoreChoiceHint = document.getElementById("score-choice-hint");
       const acceptSystemButton = document.getElementById("accept-system-decision");
       const saveDecisionButton = document.getElementById("save-decision");
 
@@ -1219,6 +1385,54 @@
         ["Academic Words", "AWL_Ratio"]
       ];
 
+      const metricScales = {
+        Word_Count: {
+          title: "Word Count Scale",
+          note: "Higher values usually show more developed production.",
+          ranges: [
+            ["Strong", "300+"],
+            ["Developing", "150-299"],
+            ["Low", "<150"]
+          ]
+        },
+        Sentence_Count: {
+          title: "Sentence Count Scale",
+          note: "Higher values usually show more developed production.",
+          ranges: [
+            ["Strong", "15+"],
+            ["Developing", "8-14"],
+            ["Low", "<8"]
+          ]
+        },
+        Grammar_Errors_per_100: {
+          title: "Errors per 100 Words Scale",
+          note: "Lower values are stronger for this indicator.",
+          ranges: [
+            ["Clean", "0-3"],
+            ["Some Errors", ">3-7"],
+            ["Many Errors", ">7"]
+          ]
+        },
+        Type_Token_Ratio: {
+          title: "Vocabulary Variety Scale",
+          note: "Higher values suggest more varied vocabulary.",
+          ranges: [
+            ["Strong", "0.50+"],
+            ["Developing", "0.35-0.49"],
+            ["Low", "<0.35"]
+          ]
+        },
+        AWL_Ratio: {
+          title: "Academic Words Scale",
+          note: "Higher values suggest more academic word use.",
+          ranges: [
+            ["Strong", "0.08+"],
+            ["Developing", "0.04-0.079"],
+            ["Low", "<0.04"]
+          ]
+        }
+      };
+
       function fillSelect(select, values) {
         select.replaceChildren();
         values.forEach((value) => {
@@ -1239,6 +1453,9 @@
       function setBusy(isBusy) {
         startButton.disabled = isBusy;
         sampleButton.disabled = isBusy;
+        loadReviewButton.disabled = isBusy;
+        processModeButton.disabled = isBusy;
+        reviewModeButton.disabled = isBusy;
       }
 
       function displayValue(value, fallback = "-") {
@@ -1288,6 +1505,55 @@
         const rounded = Math.round(number * 2) / 2;
         const roundedOption = String(rounded);
         return scoreOptions.includes(roundedOption) ? roundedOption : "";
+      }
+
+      function isBorderlineModelScore(value) {
+        const score = numericValue(value);
+        return score === 3.5 || score === 4.5 || score === 5.5;
+      }
+
+      function borderlineChoices(value) {
+        const score = numericValue(value);
+        if (!isBorderlineModelScore(score)) {
+          return [];
+        }
+        return [String(Math.floor(score)), String(Math.ceil(score))];
+      }
+
+      function autoFinalScoreForRecord(record) {
+        const savedScore = finalScoreOption(record.Rater_Final_Score);
+        if (savedScore && validateFinalScoreChoice(record, savedScore).ok) {
+          return savedScore;
+        }
+        if (isBorderlineModelScore(record.llm_recommended_score)) {
+          return "";
+        }
+        return finalScoreOption(record.llm_recommended_score);
+      }
+
+      function scoreChoiceGuidance(record) {
+        if (!isBorderlineModelScore(record.llm_recommended_score)) {
+          return "";
+        }
+        const choices = borderlineChoices(record.llm_recommended_score);
+        return `Borderline model score ${finalScoreOption(record.llm_recommended_score)}: choose ${choices[0]} or ${choices[1]} as the final score.`;
+      }
+
+      function validateFinalScoreChoice(record, value) {
+        if (!value) {
+          return { ok: false, message: "Choose a final score before saving" };
+        }
+        if (!isBorderlineModelScore(record.llm_recommended_score)) {
+          return { ok: true, message: "" };
+        }
+        const choices = borderlineChoices(record.llm_recommended_score);
+        if (choices.includes(finalScoreOption(value))) {
+          return { ok: true, message: "" };
+        }
+        return {
+          ok: false,
+          message: `This borderline score must be finalized as ${choices[0]} or ${choices[1]}.`
+        };
       }
 
       function makeBand(label, tone, rank) {
@@ -1428,6 +1694,14 @@
         setMessage(progress.message || status, status === "failed");
       }
 
+      function setWorkflowMode(mode) {
+        const isReview = mode === "review";
+        processModeButton.classList.toggle("active", !isReview);
+        reviewModeButton.classList.toggle("active", isReview);
+        form.classList.toggle("hidden", isReview);
+        reviewUploadForm.classList.toggle("hidden", !isReview);
+      }
+
       function updateDashboardCounts() {
         const records = getRecords();
         let pending = 0;
@@ -1468,6 +1742,38 @@
         essaySelector.value = String(currentEssayIndex);
       }
 
+      function createMetricHelp(field) {
+        const scale = metricScales[field];
+        if (!scale) {
+          return null;
+        }
+
+        const help = document.createElement("div");
+        help.className = "metric-help";
+        help.id = `metric-help-${field}`;
+
+        const title = document.createElement("strong");
+        title.textContent = scale.title;
+
+        const list = document.createElement("ul");
+        scale.ranges.forEach(([label, range]) => {
+          const item = document.createElement("li");
+          const itemLabel = document.createElement("span");
+          itemLabel.textContent = label;
+          const itemRange = document.createElement("span");
+          itemRange.textContent = range;
+          item.append(itemLabel, itemRange);
+          list.appendChild(item);
+        });
+
+        const note = document.createElement("div");
+        note.className = "metric-help-note";
+        note.textContent = scale.note;
+
+        help.append(title, list, note);
+        return help;
+      }
+
       function renderFieldGrid(container, record, fields) {
         container.replaceChildren();
         fields.forEach(([label, field]) => {
@@ -1483,6 +1789,15 @@
           pill.className = `band-pill${band.tone ? ` ${band.tone}` : ""}`;
           pill.textContent = band.label;
           item.append(title, value, pill);
+          if (!isTrait) {
+            const help = createMetricHelp(field);
+            if (help) {
+              item.classList.add("has-help");
+              item.tabIndex = 0;
+              item.setAttribute("aria-describedby", help.id);
+              item.appendChild(help);
+            }
+          }
           container.appendChild(item);
         });
       }
@@ -1519,16 +1834,28 @@
         if (score === null) {
           return "Choose a final score";
         }
-        if (score <= 2.5) {
+        if (score <= 3) {
           return "Pre-EIL";
         }
-        if (score <= 3.5) {
-          return "Advanced I";
+        if (score === 3.5) {
+          return "Choose 3 or 4";
         }
-        if (score <= 4.5) {
-          return "Advanced II";
+        if (score === 4) {
+          return "EIL 1";
         }
-        return "Post EIL";
+        if (score === 4.5) {
+          return "Choose 4 or 5";
+        }
+        if (score === 5) {
+          return "EIL 2";
+        }
+        if (score === 5.5) {
+          return "Choose 5 or 6";
+        }
+        if (score === 6) {
+          return "Test Out";
+        }
+        return "Choose a final score";
       }
 
       function derivedDecision(record, finalScoreValue) {
@@ -1545,10 +1872,15 @@
         const modelScoreValue = numericValue(record.llm_recommended_score);
         const placement = placementForScore(finalScore);
         const difference = modelScoreValue === null ? 0 : Math.abs(finalScore - modelScoreValue);
-        const action = difference >= 1 ? "Override score" : "Accept system score";
-        const notes = difference >= 1
-          ? `Final score differs from model score by ${difference.toFixed(1)} point${difference === 1 ? "" : "s"}.`
-          : "No notes needed";
+        const modelBorderline = isBorderlineModelScore(record.llm_recommended_score);
+        const action = modelBorderline
+          ? "Resolve borderline score"
+          : difference >= 1 ? "Override score" : "Accept system score";
+        const notes = modelBorderline
+          ? scoreChoiceGuidance(record)
+          : difference >= 1
+            ? `Final score differs from model score by ${difference.toFixed(1)} point${difference === 1 ? "" : "s"}.`
+            : "No notes needed";
 
         return {
           Rater_Final_Placement: placement,
@@ -1565,6 +1897,9 @@
       function updateDecisionPreview(record) {
         const preview = derivedDecision(record, finalScoreControl.value);
         const previewFinalBand = scoreBand(finalScoreControl.value);
+        const guidance = scoreChoiceGuidance(record);
+        scoreChoiceHint.textContent = guidance;
+        scoreChoiceHint.classList.toggle("hidden", !guidance);
         finalScoreDisplay.textContent = displayValue(finalScoreControl.value, "Pending");
         applyBand(finalScoreBox, previewFinalBand, "score-box");
         updateBandPill(
@@ -1600,7 +1935,7 @@
         const text = getRecordValue(record, ["Essay_Text", "Essay", "text_clean"], "");
         const status = normalizedStatus(record);
         const attention = getRecordValue(record, ["Attention_Flag", "attention_flag", "Profile_Attention_Flag"], "");
-        const modelScoreOption = finalScoreOption(record.llm_recommended_score);
+        const systemFinalScore = autoFinalScoreForRecord(record);
 
         updateDashboardCounts();
         updateEssaySelector();
@@ -1639,9 +1974,9 @@
         renderFieldGrid(metricGrid, record, metricFields);
         llmJustification.textContent = displayValue(record.llm_justification, "No model justification available.");
 
-        setSelectValue(finalScoreControl, record.Rater_Final_Score);
+        setSelectValue(finalScoreControl, systemFinalScore);
         updateDecisionPreview(record);
-        acceptSystemButton.disabled = !modelScoreOption;
+        acceptSystemButton.disabled = !systemFinalScore;
 
         emptyState.classList.add("hidden");
         reviewDashboard.classList.remove("hidden");
@@ -1739,12 +2074,17 @@
           clearInterval(pollTimer);
           pollTimer = null;
           setBusy(false);
-          currentJob = { statusUrl, resultUrl, downloadUrl };
           const result = await requestJson(`${apiBase}${resultUrl}`);
-          renderRecords(result);
+          currentJob = { statusUrl, resultUrl, downloadUrl };
+          currentResult = null;
+          currentEssayIndex = 0;
+          summaryRows.textContent = String(result.rows_processed || 0);
+          summaryColumns.textContent = String(result.columns ? result.columns.length : 0);
           downloadLink.href = `${apiBase}${downloadUrl}`;
           downloadLink.classList.remove("hidden", "disabled");
-          setupBand.classList.add("collapsed");
+          emptyState.classList.remove("hidden");
+          reviewDashboard.classList.add("hidden");
+          setMessage("Completed workbook is ready to download");
           return;
         }
 
@@ -1827,13 +2167,54 @@
         }
       }
 
+      async function loadReviewWorkbook(event) {
+        event.preventDefault();
+        if (!reviewFileInput.files.length) {
+          setMessage("Choose a completed .xlsx workbook", true);
+          return;
+        }
+
+        setBusy(true);
+        resetReviewState();
+        progressFill.style.width = "12%";
+        summaryRows.textContent = "0";
+        summaryColumns.textContent = "0";
+        setMessage("Loading completed workbook");
+
+        try {
+          const formData = new FormData(reviewUploadForm);
+          const created = await requestJson(`${apiBase}/review-workbook`, {
+            method: "POST",
+            body: formData
+          });
+          updateProgress(created);
+          currentJob = {
+            statusUrl: created.status_url,
+            resultUrl: created.result_url,
+            downloadUrl: created.download_url
+          };
+          const result = await requestJson(`${apiBase}${created.result_url}`);
+          renderRecords(result);
+          downloadLink.href = `${apiBase}${created.download_url}`;
+          downloadLink.classList.remove("hidden", "disabled");
+          setupBand.classList.add("collapsed");
+          setMessage("Completed workbook loaded for review");
+        } catch (error) {
+          setMessage(error.message, true);
+        } finally {
+          setBusy(false);
+        }
+      }
+
       async function saveDecision() {
         if (!currentJob || !currentResult) {
           setMessage("No completed job is available for review", true);
           return;
         }
-        if (!finalScoreControl.value) {
-          setMessage("Choose a final score before saving", true);
+        const currentRecord = getRecords()[currentEssayIndex] || {};
+        const validation = validateFinalScoreChoice(currentRecord, finalScoreControl.value);
+        if (!validation.ok) {
+          setMessage(validation.message, true);
           finalScoreControl.focus();
           return;
         }
@@ -1844,7 +2225,6 @@
         saveDecisionButton.textContent = "Saving";
 
         try {
-          const currentRecord = getRecords()[currentEssayIndex] || {};
           const preview = updateDecisionPreview(currentRecord);
           const response = await requestJson(`${apiBase}${currentJob.statusUrl}/decision`, {
             method: "POST",
@@ -1869,15 +2249,15 @@
           saveDecisionButton.disabled = false;
           saveDecisionButton.textContent = previousLabel;
           const currentRecord = getRecords()[currentEssayIndex] || {};
-          acceptSystemButton.disabled = !finalScoreOption(currentRecord.llm_recommended_score);
+          acceptSystemButton.disabled = !autoFinalScoreForRecord(currentRecord);
         }
       }
 
       async function acceptSystemDecision() {
         const currentRecord = getRecords()[currentEssayIndex] || {};
-        const modelFinalScore = finalScoreOption(currentRecord.llm_recommended_score);
+        const modelFinalScore = autoFinalScoreForRecord(currentRecord);
         if (!modelFinalScore) {
-          setMessage("No model score is available to accept", true);
+          setMessage(scoreChoiceGuidance(currentRecord) || "No model score is available to accept", true);
           return;
         }
 
@@ -1908,7 +2288,14 @@
       setupToggle.addEventListener("click", () => {
         setupBand.classList.toggle("collapsed");
       });
+      processModeButton.addEventListener("click", () => {
+        setWorkflowMode("process");
+      });
+      reviewModeButton.addEventListener("click", () => {
+        setWorkflowMode("review");
+      });
       form.addEventListener("submit", startUploadJob);
+      reviewUploadForm.addEventListener("submit", loadReviewWorkbook);
       sampleButton.addEventListener("click", startSampleJob);
       acceptSystemButton.addEventListener("click", acceptSystemDecision);
       saveDecisionButton.addEventListener("click", saveDecision);

@@ -186,8 +186,8 @@ updated_row = update_job_decision(
     job_id,
     row_index=0,
     decision={
-        "Rater_Final_Score": 4.5,
-        "Rater_Final_Placement": "Advanced II",
+        "Rater_Final_Score": 5,
+        "Rater_Final_Placement": "EIL 2",
         "Rater_Action": "Override score",
         "Reason_Notes": "Human rater found stronger organization than the model.",
     },
@@ -285,8 +285,8 @@ await fetch(`http://127.0.0.1:8765${created.status_url}/decision`, {
   body: JSON.stringify({
     row_index: 0,
     decision: {
-      Rater_Final_Score: "4.5",
-      Rater_Final_Placement: "Advanced II",
+      Rater_Final_Score: "5",
+      Rater_Final_Placement: "EIL 2",
       Rater_Action: "Override score",
       Reason_Notes: "Human rater found stronger organization than the model.",
     },
@@ -306,12 +306,18 @@ Reason_Notes
 Decision_Updated_At
 ```
 
-The included UI in `HITL/ui/index.html` uses this same flow: upload workbook,
-poll status, collapse setup after processing, show a review dashboard, let the
-rater move through one essay at a time, flag model/indicator mismatches, jump
-to the next pending essay, save final decisions, and expose the completed
-workbook download link. Its sample button calls `/sample-job`, so packaged app
-users do not need to know where the sample workbook lives on disk.
+Final placement uses the approved HITL rule: scores `1` through `3`, including
+`1.5` and `2.5`, are `Pre-EIL`; `4` is `EIL 1`; `5` is `EIL 2`; and `6` is
+`Test Out`. Scores `3.5`, `4.5`, and `5.5` stay in review until the rater
+chooses one of the neighboring whole scores.
+
+The included UI in `HITL/ui/index.html` uses a two-step flow: process a raw
+workbook and download the completed workbook, then load a completed workbook
+for essay-by-essay review. The review dashboard lets the rater move through one
+essay at a time, flag model/indicator mismatches, jump to the next pending
+essay, save final decisions, and expose the updated workbook download link. Its
+sample button calls `/sample-job`, so packaged app users do not need to know
+where the sample workbook lives on disk.
 
 For a quick test on only a few essays:
 
