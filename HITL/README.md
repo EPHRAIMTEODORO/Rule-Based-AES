@@ -306,10 +306,17 @@ Reason_Notes
 Decision_Updated_At
 ```
 
-Final placement uses the approved HITL rule: scores `1` through `3`, including
-`1.5` and `2.5`, are `Pre-EIL`; `4` is `EIL 1`; `5` is `EIL 2`; and `6` is
-`Test Out`. Scores `3.5`, `4.5`, and `5.5` stay in review until the rater
-chooses one of the neighboring whole scores.
+Freshly processed rows are always `Pending`: processing writes the system
+recommendation and evidence, but does not write a human final score or mark a
+row `Finalized`. The rater can choose a whole-number final score from `1`
+through `6`, or use `Accept System Decision` to accept the model recommendation.
+Final placement uses the approved HITL rule: scores `1` through `3` are
+`Pre-EIL`; `4` is `EIL 1`; `5` is `EIL 2`; and `6` is `Test Out`.
+
+The local model has a ten-minute per-essay response limit by default because
+Llama 3 can be slow on CPU-only or busy computers. API callers can override it
+with the `timeout` field, in seconds. The UI displays that the model may take
+several minutes and shows a specific message when the limit is exceeded.
 
 The included UI in `HITL/ui/index.html` uses a two-step flow: process a raw
 workbook and download the completed workbook, then load a completed workbook
@@ -437,8 +444,8 @@ These columns are produced by local Llama 3 using the ESL placement rubric:
   readers who are not used to learner writing.
 - `llm_grammar_meaning_impact`: Whether grammar and vocabulary errors interfere
   with meaning. This is different from counting grammar errors.
-- `llm_recommended_score`: Llama 3's recommended placement score on the human
-  1-6 scale, allowing half-points.
+- `llm_recommended_score`: Llama 3's recommended whole-number placement score
+  on the human 1-6 scale.
 - `llm_justification`: Short evidence-based explanation for the LLM rubric
   scores.
 

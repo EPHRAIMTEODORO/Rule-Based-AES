@@ -51,9 +51,9 @@ def agreement_rate(
     return matches / len(targets)
 
 
-def round_to_half(value: float) -> float:
-    """Round a score to the nearest half point."""
-    return round(value * 2) / 2
+def round_to_whole(value: float) -> float:
+    """Round a score to the nearest whole placement grade."""
+    return float(math.floor(value + 0.5))
 
 
 def quadratic_weighted_kappa(
@@ -63,7 +63,7 @@ def quadratic_weighted_kappa(
     max_score: float,
     step: float,
 ) -> float:
-    """Compute quadratic weighted kappa for half-point score bands."""
+    """Compute quadratic weighted kappa for whole-number score bands."""
     labels = []
     current = min_score
     while current <= max_score + 1e-9:
@@ -77,8 +77,8 @@ def quadratic_weighted_kappa(
     target_counts = [0.0 for _ in labels]
 
     for prediction, target in zip(predictions, targets):
-        prediction_label = min(max(round_to_half(prediction), min_score), max_score)
-        target_label = min(max(round_to_half(target), min_score), max_score)
+        prediction_label = min(max(round_to_whole(prediction), min_score), max_score)
+        target_label = min(max(round_to_whole(target), min_score), max_score)
         prediction_index = label_to_index[prediction_label]
         target_index = label_to_index[target_label]
         observed[prediction_index][target_index] += 1
@@ -142,7 +142,7 @@ def evaluate_column(
             targets,
             min_score=1.0,
             max_score=6.0,
-            step=0.5,
+            step=1.0,
         ),
     }
 

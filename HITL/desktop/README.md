@@ -125,3 +125,22 @@ npm run dist:linux
 Use `npm run dist:with-backend` when you want the package command to rebuild the
 Python sidecar first. The current app still does not bundle Java, Ollama, or the
 Llama model. Those are the next packaging phase.
+
+## Windows Installer Handoff
+
+The Windows handoff bundle is written to the ignored `dist/installer-files/`
+folder. Keep these three files together when sending the installer to a tester:
+
+```text
+7za.exe
+HITL Academic Writing Scorer Setup 0.1.1.exe
+hitl-app.7z
+```
+
+The tester runs the `Setup` executable. It installs the desktop app and its
+bundled Python backend, Java runtime, Ollama runtime, and Llama model store;
+the tester does not need to install Python, Java, Ollama, or the model. The
+archive and `7za.exe` are installer inputs and should not be opened or renamed.
+
+Generated installers, runtime copies, model files, and build outputs are
+intentionally ignored by git and are not part of source commits.

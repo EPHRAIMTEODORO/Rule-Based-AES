@@ -1367,7 +1367,7 @@
       let currentResult = null;
       let currentEssayIndex = 0;
 
-      const scoreOptions = ["", "1", "1.5", "2", "2.5", "3", "3.5", "4", "4.5", "5", "5.5", "6"];
+      const scoreOptions = ["", "1", "2", "3", "4", "5", "6"];
 
       const traitFields = [
         ["Organization", "LLM_Organization_Coherence"],
@@ -1497,62 +1497,38 @@
           return "";
         }
 
-        const exact = String(number);
-        if (scoreOptions.includes(exact)) {
-          return exact;
-        }
-
-        const rounded = Math.round(number * 2) / 2;
-        const roundedOption = String(rounded);
-        return scoreOptions.includes(roundedOption) ? roundedOption : "";
+        const rounded = Math.min(6, Math.max(1, Math.floor(number + 0.5)));
+        const wholeScore = String(rounded);
+        return scoreOptions.includes(wholeScore) ? wholeScore : "";
       }
 
-      function isBorderlineModelScore(value) {
-        const score = numericValue(value);
-        return score === 3.5 || score === 4.5 || score === 5.5;
+      function isWholeGrade(value) {
+        const number = numericValue(value);
+        return number !== null && Number.isInteger(number) && number >= 1 && number <= 6;
       }
 
-      function borderlineChoices(value) {
-        const score = numericValue(value);
-        if (!isBorderlineModelScore(score)) {
-          return [];
-        }
-        return [String(Math.floor(score)), String(Math.ceil(score))];
-      }
-
-      function autoFinalScoreForRecord(record) {
-        const savedScore = finalScoreOption(record.Rater_Final_Score);
-        if (savedScore && validateFinalScoreChoice(record, savedScore).ok) {
-          return savedScore;
-        }
-        if (isBorderlineModelScore(record.llm_recommended_score)) {
-          return "";
-        }
+      function systemScoreForRecord(record) {
         return finalScoreOption(record.llm_recommended_score);
       }
 
+      function savedFinalScoreForRecord(record) {
+        return finalScoreOption(record.Rater_Final_Score);
+      }
+
       function scoreChoiceGuidance(record) {
-        if (!isBorderlineModelScore(record.llm_recommended_score)) {
-          return "";
-        }
-        const choices = borderlineChoices(record.llm_recommended_score);
-        return `Borderline model score ${finalScoreOption(record.llm_recommended_score)}: choose ${choices[0]} or ${choices[1]} as the final score.`;
+        return "";
       }
 
       function validateFinalScoreChoice(record, value) {
         if (!value) {
           return { ok: false, message: "Choose a final score before saving" };
         }
-        if (!isBorderlineModelScore(record.llm_recommended_score)) {
-          return { ok: true, message: "" };
-        }
-        const choices = borderlineChoices(record.llm_recommended_score);
-        if (choices.includes(finalScoreOption(value))) {
+        if (isWholeGrade(value)) {
           return { ok: true, message: "" };
         }
         return {
           ok: false,
-          message: `This borderline score must be finalized as ${choices[0]} or ${choices[1]}.`
+          message: "Final score must be a whole number from 1 to 6."
         };
       }
 
@@ -1565,7 +1541,7 @@
         if (score === null) {
           return makeBand("Not scored", "", 0);
         }
-        if (score <= 2.5) {
+        if (score <= 3) {
           return makeBand("Low", "low", 1);
         }
         if (score <= 4) {
@@ -1647,7 +1623,7 @@
 
       function essaySignalBands(record) {
         return {
-          model: scoreBand(record.llm_recommended_score),
+          model: scoreBand(systemScoreForRecord(record)),
           writing: indicatorCompositeBand(record)
         };
       }
@@ -1691,7 +1667,10 @@
         summaryStatus.textContent = status.charAt(0).toUpperCase() + status.slice(1);
         summaryRows.textContent = String(progress.rows_processed || current || 0);
         progressFill.style.width = `${percent}%`;
-        setMessage(progress.message || status, status === "failed");
+        const message = status === "failed"
+          ? `Processing failed: ${statusPayload.error || progress.message || "The local backend stopped unexpectedly."}`
+          : progress.message || status;
+        setMessage(message, status === "failed");
       }
 
       function setWorkflowMode(mode) {
@@ -1837,20 +1816,11 @@
         if (score <= 3) {
           return "Pre-EIL";
         }
-        if (score === 3.5) {
-          return "Choose 3 or 4";
-        }
         if (score === 4) {
           return "EIL 1";
         }
-        if (score === 4.5) {
-          return "Choose 4 or 5";
-        }
         if (score === 5) {
           return "EIL 2";
-        }
-        if (score === 5.5) {
-          return "Choose 5 or 6";
         }
         if (score === 6) {
           return "Test Out";
@@ -1869,18 +1839,13 @@
           };
         }
 
-        const modelScoreValue = numericValue(record.llm_recommended_score);
+        const modelScoreValue = numericValue(systemScoreForRecord(record));
         const placement = placementForScore(finalScore);
         const difference = modelScoreValue === null ? 0 : Math.abs(finalScore - modelScoreValue);
-        const modelBorderline = isBorderlineModelScore(record.llm_recommended_score);
-        const action = modelBorderline
-          ? "Resolve borderline score"
-          : difference >= 1 ? "Override score" : "Accept system score";
-        const notes = modelBorderline
-          ? scoreChoiceGuidance(record)
-          : difference >= 1
-            ? `Final score differs from model score by ${difference.toFixed(1)} point${difference === 1 ? "" : "s"}.`
-            : "No notes needed";
+        const action = difference >= 1 ? "Override score" : "Accept system score";
+        const notes = difference >= 1
+          ? `Final score differs from model score by ${difference} point${difference === 1 ? "" : "s"}.`
+          : "No notes needed";
 
         return {
           Rater_Final_Placement: placement,
@@ -1935,7 +1900,7 @@
         const text = getRecordValue(record, ["Essay_Text", "Essay", "text_clean"], "");
         const status = normalizedStatus(record);
         const attention = getRecordValue(record, ["Attention_Flag", "attention_flag", "Profile_Attention_Flag"], "");
-        const systemFinalScore = autoFinalScoreForRecord(record);
+        const systemFinalScore = systemScoreForRecord(record);
 
         updateDashboardCounts();
         updateEssaySelector();
@@ -1950,19 +1915,19 @@
 
         essayTitle.textContent = `Essay ${essayId}`;
         essayPrompt.textContent = prompt ? `Prompt: ${prompt}` : "";
-        modelScore.textContent = displayValue(record.llm_recommended_score);
-        finalScoreDisplay.textContent = displayValue(record.Rater_Final_Score, "Pending");
+        modelScore.textContent = displayValue(systemFinalScore);
+        finalScoreDisplay.textContent = displayValue(savedFinalScoreForRecord(record), "Pending");
         essayText.textContent = text || "Essay text unavailable";
 
         const bands = essaySignalBands(record);
         const modelBand = bands.model;
-        const finalBand = scoreBand(record.Rater_Final_Score);
+        const finalBand = scoreBand(savedFinalScoreForRecord(record));
         const writingBand = bands.writing;
         const mismatch = hasSignalMismatch(record);
         applyBand(modelScoreBox, modelBand, "score-box");
         applyBand(finalScoreBox, finalBand, "score-box");
         updateBandPill(modelScoreBand, modelBand);
-        updateBandPill(finalScoreBand, record.Rater_Final_Score ? finalBand : makeBand("Pending", "", 0));
+        updateBandPill(finalScoreBand, savedFinalScoreForRecord(record) ? finalBand : makeBand("Pending", "", 0));
         updateBandPill(indicatorBand, mismatch ? makeBand("Mismatch", "low", 1) : writingBand);
         signalCheck.firstElementChild.textContent = signalMessage(modelBand, writingBand);
         signalCheck.className = mismatch ? "signal-check alert" : `signal-check${writingBand.tone ? ` ${writingBand.tone}` : ""}`;
@@ -1974,7 +1939,7 @@
         renderFieldGrid(metricGrid, record, metricFields);
         llmJustification.textContent = displayValue(record.llm_justification, "No model justification available.");
 
-        setSelectValue(finalScoreControl, systemFinalScore);
+        setSelectValue(finalScoreControl, savedFinalScoreForRecord(record));
         updateDecisionPreview(record);
         acceptSystemButton.disabled = !systemFinalScore;
 
@@ -2092,6 +2057,10 @@
           clearInterval(pollTimer);
           pollTimer = null;
           setBusy(false);
+          setMessage(
+            `Processing failed: ${statusPayload.error || statusPayload.progress?.message || "The local backend stopped unexpectedly."}`,
+            true
+          );
         }
       }
 
@@ -2249,13 +2218,13 @@
           saveDecisionButton.disabled = false;
           saveDecisionButton.textContent = previousLabel;
           const currentRecord = getRecords()[currentEssayIndex] || {};
-          acceptSystemButton.disabled = !autoFinalScoreForRecord(currentRecord);
+          acceptSystemButton.disabled = !systemScoreForRecord(currentRecord);
         }
       }
 
       async function acceptSystemDecision() {
         const currentRecord = getRecords()[currentEssayIndex] || {};
-        const modelFinalScore = autoFinalScoreForRecord(currentRecord);
+        const modelFinalScore = systemScoreForRecord(currentRecord);
         if (!modelFinalScore) {
           setMessage(scoreChoiceGuidance(currentRecord) || "No model score is available to accept", true);
           return;

@@ -22,6 +22,7 @@ from typing import Optional, Union
 try:
     from .hitl_processor import (
         HUMAN_DECISION_FIELDNAMES,
+        DEFAULT_LLM_TIMEOUT_SECONDS,
         ProcessingResult,
         load_completed_workbook,
         process_workbook,
@@ -30,6 +31,7 @@ try:
 except ImportError:  # Allows `python HITL/app_backend.py ...` during local testing.
     from hitl_processor import (
         HUMAN_DECISION_FIELDNAMES,
+        DEFAULT_LLM_TIMEOUT_SECONDS,
         ProcessingResult,
         load_completed_workbook,
         process_workbook,
@@ -41,8 +43,6 @@ HITL_DIR = Path(__file__).resolve().parent
 DEFAULT_OUTPUT_DIR = HITL_DIR / "outputs"
 JOB_STATUSES = {"queued", "running", "completed", "failed"}
 DECISION_FIELDNAMES = set(HUMAN_DECISION_FIELDNAMES)
-REVIEW_REQUIRED_SCORES = {3.5, 4.5, 5.5}
-
 
 @dataclass
 class AppJob:
@@ -106,17 +106,18 @@ def _json_safe(value: object) -> object:
 
 
 def _normalize_final_score(value: object) -> object:
-    """Normalize a human final score to a 1-6 half-point value."""
+    """Normalize a human final score to a whole number from 1 through 6."""
     if value is None or value == "":
         return ""
     try:
         numeric = float(value)
     except (TypeError, ValueError) as exc:
-        raise ValueError("Rater_Final_Score must be a number from 1 to 6.") from exc
+        raise ValueError("Rater_Final_Score must be a whole number from 1 to 6.") from exc
     if not math.isfinite(numeric):
-        raise ValueError("Rater_Final_Score must be a finite number from 1 to 6.")
-    numeric = max(1.0, min(6.0, numeric))
-    return round(numeric * 2) / 2
+        raise ValueError("Rater_Final_Score must be a finite whole number from 1 to 6.")
+    if not numeric.is_integer() or not 1 <= numeric <= 6:
+        raise ValueError("Rater_Final_Score must be a whole number from 1 to 6.")
+    return int(numeric)
 
 
 def _record_score(value: object) -> Optional[float]:
@@ -146,22 +147,6 @@ def _placement_for_score(value: object) -> str:
     return ""
 
 
-def _validate_decision_for_record(record: dict, decision: dict) -> None:
-    """Reject unresolved borderline model scores before saving."""
-    model_score = _record_score(record.get("llm_recommended_score"))
-    final_score = _record_score(decision.get("Rater_Final_Score"))
-    if model_score not in REVIEW_REQUIRED_SCORES or final_score is None:
-        return
-
-    valid_scores = {math.floor(model_score), math.ceil(model_score)}
-    if final_score not in valid_scores:
-        lower_score, upper_score = sorted(valid_scores)
-        raise ValueError(
-            f"Model score {model_score:g} must be finalized as "
-            f"{lower_score:g} or {upper_score:g}."
-        )
-
-
 def _normalize_decision_payload(decision: dict) -> dict:
     """Keep only supported human decision fields and normalize score values."""
     normalized = {
@@ -174,7 +159,7 @@ def _normalize_decision_payload(decision: dict) -> dict:
             normalized["Rater_Final_Score"]
         )
     if normalized.get("Rater_Final_Score") not in {None, ""}:
-        normalized["Decision_Status"] = normalized.get("Decision_Status") or "Finalized"
+        normalized["Decision_Status"] = "Finalized"
     elif any(normalized.get(key) for key in DECISION_FIELDNAMES - {"Decision_Status"}):
         normalized["Decision_Status"] = normalized.get("Decision_Status") or "Review"
     else:
@@ -263,7 +248,7 @@ def start_job(
     ollama_startup_timeout: float = 30.0,
     start_ollama: bool = True,
     temperature: float = 0.0,
-    timeout: int = 180,
+    timeout: int = DEFAULT_LLM_TIMEOUT_SECONDS,
     limit: Optional[int] = None,
     delay_seconds: float = 0.0,
     quiet: bool = True,
@@ -391,7 +376,6 @@ def update_job_decision(job_id: str, row_index: int, decision: dict) -> dict:
             raise IndexError(f"row_index {row_index} is outside the result rows.")
 
         normalized_decision = _normalize_decision_payload(decision)
-        _validate_decision_for_record(records[row_index], normalized_decision)
         placement = _placement_for_score(normalized_decision.get("Rater_Final_Score"))
         if placement:
             normalized_decision["Rater_Final_Placement"] = placement

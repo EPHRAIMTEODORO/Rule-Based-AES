@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import cgi
 import json
+import multiprocessing
 import mimetypes
 import shutil
 import sys
@@ -41,6 +42,7 @@ from HITL import (  # noqa: E402
     start_job,
     update_job_decision,
 )
+from HITL.hitl_processor import DEFAULT_LLM_TIMEOUT_SECONDS  # noqa: E402
 import hybrid_llm_aes as scorer  # noqa: E402
 
 
@@ -351,6 +353,7 @@ class HITLRequestHandler(BaseHTTPRequestHandler):
             ollama_command=DEFAULT_OLLAMA_COMMAND,
             ollama_startup_timeout=DEFAULT_OLLAMA_STARTUP_TIMEOUT,
             start_ollama=True,
+            timeout=DEFAULT_LLM_TIMEOUT_SECONDS,
             limit=1,
         )
         status = _status_with_urls(get_job_status(job_id))
@@ -382,6 +385,7 @@ class HITLRequestHandler(BaseHTTPRequestHandler):
                 _field_value(form, "ollama_startup_timeout", DEFAULT_OLLAMA_STARTUP_TIMEOUT)
             ),
             start_ollama=str(_field_value(form, "start_ollama", "true")).lower() != "false",
+            timeout=int(_field_value(form, "timeout", DEFAULT_LLM_TIMEOUT_SECONDS)),
             limit=_optional_int(_field_value(form, "limit")),
         )
         status = _status_with_urls(get_job_status(job_id))
@@ -433,6 +437,7 @@ class HITLRequestHandler(BaseHTTPRequestHandler):
                 DEFAULT_OLLAMA_STARTUP_TIMEOUT,
             ),
             start_ollama=payload.get("start_ollama", True) is not False,
+            timeout=int(payload.get("timeout", DEFAULT_LLM_TIMEOUT_SECONDS)),
             limit=payload.get("limit"),
         )
         status = _status_with_urls(get_job_status(job_id))
@@ -504,4 +509,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    multiprocessing.freeze_support()
     main()

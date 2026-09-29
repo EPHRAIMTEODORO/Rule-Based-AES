@@ -35,6 +35,7 @@ DEFAULT_PROMPT_COLUMN = "Topic"
 DEFAULT_TEXT_COLUMN = "Essay"
 DEFAULT_MODEL = "llama3:8b"
 DEFAULT_OLLAMA_URL = "http://127.0.0.1:11434/api/chat"
+DEFAULT_LLM_TIMEOUT_SECONDS = scorer.DEFAULT_LLM_TIMEOUT_SECONDS
 HUMAN_DECISION_FIELDNAMES = [
     "Rater_Final_Score",
     "Rater_Final_Placement",
@@ -48,8 +49,6 @@ COMPLETED_SCORE_MARKERS = {
     "LLM_Organization_Coherence",
     "aes_score",
 }
-REVIEW_REQUIRED_SCORES = {3.5, 4.5, 5.5}
-
 ProgressCallback = Callable[[dict], None]
 
 
@@ -82,7 +81,7 @@ class ProcessorOptions:
     ollama_startup_timeout: float = 30.0
     start_ollama: bool = True
     temperature: float = 0.0
-    timeout: int = 180
+    timeout: int = DEFAULT_LLM_TIMEOUT_SECONDS
     limit: Optional[int] = None
     delay_seconds: float = 0.0
     quiet: bool = True
@@ -290,6 +289,10 @@ def load_completed_workbook(
         for source_index, fieldname in kept_columns:
             value = row_values[source_index] if source_index < len(row_values) else ""
             record[fieldname] = scorer.normalize_cell(value)
+            if fieldname == "llm_recommended_score":
+                score = _score_value(record[fieldname])
+                if score is not None:
+                    record[fieldname] = scorer.clamp_int_score(score)
         records.append(_with_initial_decision_fields(record))
 
     workbook.close()
@@ -322,11 +325,6 @@ def _score_value(value: object) -> Optional[float]:
     return score if math.isfinite(score) else None
 
 
-def _score_label(score: float) -> str:
-    """Return a compact score label for workbook decision fields."""
-    return str(int(score)) if score.is_integer() else str(score)
-
-
 def _placement_for_final_score(score: float) -> str:
     """Map final 1-6 scores to the approved placement labels."""
     if score <= 3:
@@ -340,37 +338,33 @@ def _placement_for_final_score(score: float) -> str:
     return ""
 
 
-def _borderline_note(score: float) -> str:
-    """Return rater guidance for scores that need a whole-score decision."""
-    lower_score = int(score)
-    upper_score = lower_score + 1
-    return (
-        f"Borderline model score {_score_label(score)}: choose "
-        f"{lower_score} or {upper_score} as the final score."
-    )
+def _with_initial_decision_fields(row: dict, pending: bool = False) -> dict:
+    """Add human decision fields without auto-finalizing fresh score results."""
+    if pending:
+        return {
+            **row,
+            "Rater_Final_Score": "",
+            "Rater_Final_Placement": "",
+            "Rater_Action": "",
+            "Decision_Status": "Pending",
+            "Reason_Notes": "",
+            "Decision_Updated_At": "",
+        }
 
-
-def _with_initial_decision_fields(row: dict) -> dict:
-    """Add default human decision fields to a scored row."""
     score = _score_value(row.get("llm_recommended_score"))
-    if row.get("Rater_Final_Score"):
-        final_score = row.get("Rater_Final_Score", "")
-        final_placement = row.get("Rater_Final_Placement", "")
+    if row.get("Rater_Final_Score") not in {None, ""}:
+        raw_final_score = _score_value(row.get("Rater_Final_Score"))
+        final_score = scorer.clamp_int_score(raw_final_score) if raw_final_score is not None else ""
+        final_placement = _placement_for_final_score(final_score) if final_score != "" else ""
         action = row.get("Rater_Action", "")
         status = row.get("Decision_Status") or "Finalized"
         notes = row.get("Reason_Notes", "")
-    elif score in REVIEW_REQUIRED_SCORES:
+    elif score is not None:
         final_score = ""
         final_placement = ""
-        action = "Resolve borderline score"
-        status = row.get("Decision_Status") or "Review"
-        notes = row.get("Reason_Notes") or _borderline_note(score)
-    elif score is not None:
-        final_score = _score_label(score)
-        final_placement = _placement_for_final_score(score)
-        action = "Accept system score"
-        status = row.get("Decision_Status") or "Finalized"
-        notes = row.get("Reason_Notes") or "No notes needed"
+        action = ""
+        status = row.get("Decision_Status") or "Pending"
+        notes = row.get("Reason_Notes", "")
     else:
         final_score = ""
         final_placement = ""
@@ -402,7 +396,7 @@ def process_workbook(
     ollama_startup_timeout: float = 30.0,
     start_ollama: bool = True,
     temperature: float = 0.0,
-    timeout: int = 180,
+    timeout: int = DEFAULT_LLM_TIMEOUT_SECONDS,
     limit: Optional[int] = None,
     delay_seconds: float = 0.0,
     quiet: bool = True,
@@ -451,11 +445,15 @@ def process_workbook(
             stage="scoring",
             current=essay_index,
             total=total,
-            message=f"Scoring essay {essay_index} of {total}",
+            message=(
+                f"Scoring essay {essay_index} of {total}. "
+                f"The local model may take up to {max(1, options.timeout // 60)} minutes."
+            ),
         )
         output_rows.append(
             _with_initial_decision_fields(
-                scorer.evaluate_row(row, scorer_args, essay_index, selected_text_column)
+                scorer.evaluate_row(row, scorer_args, essay_index, selected_text_column),
+                pending=True,
             )
         )
         if delay_seconds:
@@ -502,7 +500,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--ollama-startup-timeout", type=float, default=30.0)
     parser.add_argument("--no-start-ollama", action="store_true")
     parser.add_argument("--temperature", type=float, default=0.0)
-    parser.add_argument("--timeout", type=int, default=180)
+    parser.add_argument("--timeout", type=int, default=DEFAULT_LLM_TIMEOUT_SECONDS)
     parser.add_argument("--limit", type=int)
     parser.add_argument("--delay-seconds", type=float, default=0.0)
     parser.add_argument("--quiet", action="store_true")

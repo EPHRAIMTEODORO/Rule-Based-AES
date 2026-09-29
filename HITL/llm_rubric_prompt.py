@@ -111,7 +111,7 @@ Important:
 
 Scoring scale:
 - Trait scores must be integers from 1 to 6.
-- llm_recommended_score may use half-points from 1.0 to 6.0.
+- llm_recommended_score must be a whole-number grade from 1 to 6.
 
 Required JSON keys:
 - essay_id

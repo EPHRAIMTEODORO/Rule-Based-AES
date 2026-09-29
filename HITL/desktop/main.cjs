@@ -13,6 +13,7 @@ const DEFAULT_MODEL = "llama3:8b";
 
 let mainWindow = null;
 let backendProcess = null;
+let ollamaProcess = null;
 let backendPort = null;
 let backendLogStream = null;
 
@@ -89,6 +90,64 @@ function copyMissingTree(sourceDir, targetDir) {
   return true;
 }
 
+function reconstructChunkedFiles(chunksRoot, targetRoot) {
+  if (!directoryHasContent(chunksRoot)) {
+    return false;
+  }
+
+  let reconstructed = false;
+  for (const entry of fs.readdirSync(chunksRoot, { withFileTypes: true })) {
+    if (!entry.isDirectory()) {
+      continue;
+    }
+
+    const chunkDir = path.join(chunksRoot, entry.name);
+    const manifestPath = path.join(chunkDir, "manifest.json");
+    if (!fs.existsSync(manifestPath)) {
+      continue;
+    }
+
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+    const relativePath = manifest.relativePath;
+    const expectedSize = Number(manifest.size);
+    const parts = Array.isArray(manifest.parts) ? manifest.parts : [];
+    if (!relativePath || !Number.isFinite(expectedSize) || parts.length === 0) {
+      continue;
+    }
+
+    const targetPath = path.join(targetRoot, relativePath);
+    if (fs.existsSync(targetPath) && fs.statSync(targetPath).size === expectedSize) {
+      continue;
+    }
+
+    ensureDir(path.dirname(targetPath));
+    const tempPath = `${targetPath}.tmp`;
+    const output = fs.openSync(tempPath, "w");
+    try {
+      for (const partName of parts) {
+        const partPath = path.join(chunkDir, partName);
+        if (!fs.existsSync(partPath)) {
+          throw new Error(`Missing model chunk: ${partPath}`);
+        }
+        const part = fs.readFileSync(partPath);
+        fs.writeSync(output, part);
+      }
+    } finally {
+      fs.closeSync(output);
+    }
+
+    const writtenSize = fs.statSync(tempPath).size;
+    if (writtenSize !== expectedSize) {
+      fs.rmSync(tempPath, { force: true });
+      throw new Error(`Reconstructed ${relativePath} was ${writtenSize} bytes; expected ${expectedSize}.`);
+    }
+    fs.renameSync(tempPath, targetPath);
+    reconstructed = true;
+  }
+
+  return reconstructed;
+}
+
 function findPythonCommand() {
   if (process.env.HITL_PYTHON) {
     return process.env.HITL_PYTHON;
@@ -160,7 +219,10 @@ function findOllamaCommand() {
 
 function provisionBundledOllamaModels(targetModelsDir) {
   const bundledModelsDir = runtimeAssetPath("ollama-models");
-  return copyMissingTree(bundledModelsDir, targetModelsDir);
+  const bundledChunksDir = runtimeAssetPath("ollama-model-chunks");
+  const copiedModels = copyMissingTree(bundledModelsDir, targetModelsDir);
+  const reconstructedModels = reconstructChunkedFiles(bundledChunksDir, targetModelsDir);
+  return copiedModels || reconstructedModels;
 }
 
 function findFreePort(preferredPort) {
@@ -195,6 +257,62 @@ function requestJson(url, options = {}) {
     request.on("error", reject);
     request.end();
   });
+}
+
+function ollamaTagsUrl(ollamaUrl) {
+  const parsedUrl = new URL(ollamaUrl);
+  parsedUrl.pathname = "/api/tags";
+  parsedUrl.search = "";
+  return parsedUrl.toString();
+}
+
+async function isOllamaReachable(ollamaUrl) {
+  try {
+    await requestJson(ollamaTagsUrl(ollamaUrl));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function waitForOllama(ollamaUrl, timeoutMs = 45000) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    if (await isOllamaReachable(ollamaUrl)) {
+      return true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  return false;
+}
+
+async function startOllamaServer(ollamaCommand, ollamaUrl, env) {
+  if (await isOllamaReachable(ollamaUrl)) {
+    backendLogStream?.write(`Ollama API already reachable at ${ollamaTagsUrl(ollamaUrl)}\n`);
+    return;
+  }
+
+  backendLogStream?.write(`Starting Ollama server with ${ollamaCommand}\n`);
+  try {
+    ollamaProcess = spawn(ollamaCommand, ["serve"], {
+      env,
+      stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
+    });
+  } catch (error) {
+    backendLogStream?.write(`Ollama failed to start: ${error.message}\n`);
+    return;
+  }
+
+  ollamaProcess.stdout.on("data", (chunk) => backendLogStream?.write(chunk));
+  ollamaProcess.stderr.on("data", (chunk) => backendLogStream?.write(chunk));
+  ollamaProcess.once("exit", (code, signal) => {
+    backendLogStream?.write(`[${new Date().toISOString()}] Ollama exited code=${code} signal=${signal}\n`);
+    ollamaProcess = null;
+  });
+
+  const ready = await waitForOllama(ollamaUrl);
+  backendLogStream?.write(`Ollama startup status: ${ready ? "ready" : "not ready before timeout"}\n`);
 }
 
 async function waitForHealth(port) {
@@ -271,14 +389,18 @@ async function startBackend() {
   }
 
   backendLogStream = fs.createWriteStream(path.join(logDir, "hitl-backend.log"), { flags: "a" });
-  backendLogStream.write(`\n[${new Date().toISOString()}] Starting HITL backend on ${backendPort}\n`);
-  backendLogStream.write(`Command: ${backendCommand} ${launchArgs.join(" ")}\n`);
+  backendLogStream.write(`\n[${new Date().toISOString()}] Preparing HITL desktop runtime on backend port ${backendPort}\n`);
   backendLogStream.write(`OLLAMA_MODELS: ${backendEnv.OLLAMA_MODELS}\n`);
   backendLogStream.write(`OLLAMA_HOST: ${backendEnv.OLLAMA_HOST}\n`);
   backendLogStream.write(`Bundled model store copied: ${copiedBundledModels ? "yes" : "no"}\n`);
   if (bundledJavaHome) {
     backendLogStream.write(`JAVA_HOME: ${bundledJavaHome}\n`);
   }
+
+  await startOllamaServer(ollamaCommand, ollamaUrl, backendEnv);
+
+  backendLogStream.write(`[${new Date().toISOString()}] Starting HITL backend on ${backendPort}\n`);
+  backendLogStream.write(`Command: ${backendCommand} ${launchArgs.join(" ")}\n`);
 
   backendProcess = spawn(
     backendCommand,
@@ -356,6 +478,9 @@ function stopBackend() {
   setTimeout(() => {
     if (backendProcess && !backendProcess.killed) {
       backendProcess.kill();
+    }
+    if (ollamaProcess && !ollamaProcess.killed) {
+      ollamaProcess.kill();
     }
     backendLogStream?.end();
   }, 1500).unref();
