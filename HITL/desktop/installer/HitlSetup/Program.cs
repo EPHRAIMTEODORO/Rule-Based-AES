@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Text;
 
 internal static class Program
 {
@@ -74,8 +75,8 @@ internal static class Program
     private static void CreateShortcuts(string appExe)
     {
         string script =
-            "$target = $args[0];" +
-            "$work = Split-Path $target;" +
+            "$target = $env:HITL_APP_EXE;" +
+            "$work = Split-Path -LiteralPath $target;" +
             "$ws = New-Object -ComObject WScript.Shell;" +
             "$links = @(" +
             "(Join-Path ([Environment]::GetFolderPath('Desktop')) 'HITL Academic Writing Scorer.lnk')," +
@@ -92,10 +93,12 @@ internal static class Program
         ProcessStartInfo startInfo = new ProcessStartInfo
         {
             FileName = "powershell.exe",
-            Arguments = "-NoProfile -ExecutionPolicy Bypass -Command \"" + script.Replace("\"", "\\\"") + "\" \"" + appExe + "\"",
+            Arguments = "-NoProfile -ExecutionPolicy Bypass -EncodedCommand " +
+                Convert.ToBase64String(Encoding.Unicode.GetBytes(script)),
             UseShellExecute = false,
             CreateNoWindow = true
         };
+        startInfo.Environment["HITL_APP_EXE"] = appExe;
 
         Process process = Process.Start(startInfo);
         if (process != null)
