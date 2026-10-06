@@ -123,8 +123,15 @@ npm run dist:linux
 ```
 
 Use `npm run dist:with-backend` when you want the package command to rebuild the
-Python sidecar first. The current app still does not bundle Java, Ollama, or the
-Llama model. Those are the next packaging phase.
+Python sidecar first. For a self-contained release, prepare the target
+platform's Java, Ollama, and model assets before packaging. Build on the target
+operating system and architecture so the PyInstaller sidecar and native runtime
+files match the release device.
+
+For the complete platform checklists, see:
+
+- [`../WINDOWS_HANDOFF.md`](../WINDOWS_HANDOFF.md) for the Windows installer.
+- [`../MAC_HANDOFF.md`](../MAC_HANDOFF.md) for the macOS DMG.
 
 ## Windows Installer Handoff
 

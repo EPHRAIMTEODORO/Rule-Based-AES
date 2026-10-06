@@ -42,6 +42,13 @@ PACKAGING_PLAN.md
 runtime_manifest.json
 ```
 
+Platform build handoffs:
+
+```text
+WINDOWS_HANDOFF.md
+MAC_HANDOFF.md
+```
+
 ## Design Goal
 
 The current rule-based AES script captures measurable language features, but it
@@ -232,9 +239,11 @@ npm start
 
 The Electron shell starts the local Python API server automatically, waits for
 `/health`, opens the dashboard, stores uploads/outputs in the app-data folder,
-and stops the backend when the desktop app exits. Packaged builds now use a
-PyInstaller Python sidecar. They still need bundled Java, Ollama, and model
-assets before they are fully self-contained for end users.
+and stops the backend when the desktop app exits. Packaged builds use a
+PyInstaller Python sidecar plus target-platform Java, Ollama, and model assets.
+The tested Windows handoff is fully offline and can replace an existing
+per-user install while preserving app data. macOS packaging is documented in
+[`MAC_HANDOFF.md`](MAC_HANDOFF.md) and must be built on the target Mac.
 
 The default server listens on `http://127.0.0.1:8765` and serves the prototype
 UI at that same address.

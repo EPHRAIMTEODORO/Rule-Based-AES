@@ -1,7 +1,9 @@
 # Windows Handoff For HITL Desktop Packaging
 
-This handoff is for continuing the HITL Academic Writing Scorer desktop build
-on a Windows machine.
+This handoff is for building and testing the HITL Academic Writing Scorer
+desktop app on Windows. For the Mac build planned on the other laptop, use
+[`MAC_HANDOFF.md`](MAC_HANDOFF.md); runtime binaries and Python sidecars must
+be built on the target operating system and architecture.
 
 ## Current State
 
@@ -19,10 +21,20 @@ The repo on `main` already includes:
 - machine-readable packaging checklist in `HITL/packaging/runtime_manifest.json`
 - `Essays_V2.xlsx` as a small upload workbook for Windows testing
 
-The Mac ARM build was verified with:
+The Windows production handoff has been verified with a bundled Python sidecar,
+Windows Ollama runtime, local `llama3:8b` model store, private Java runtime,
+offline startup, workbook processing, and upgrade-over-existing-install.
+
+The shared launcher also has platform paths for macOS ARM64 and x64. Build the
+Mac sidecar and runtime assets on the Mac laptop itself; do not copy Windows
+executables or a Windows PyInstaller sidecar into a Mac build.
+
+Continue the Mac work with [`MAC_HANDOFF.md`](MAC_HANDOFF.md).
+
+The current Mac target checklist is:
 
 - bundled PyInstaller backend sidecar
-- bundled Ollama runtime
+- bundled Ollama runtime and companion files
 - copied local `llama3:8b` Ollama model store
 - bundled Java runtime
 - successful local Ollama inference from the copied model store
@@ -89,12 +101,24 @@ HITL/desktop/runtime-assets/ollama-models/manifests/
 HITL/desktop/runtime-assets/jre/win32-x64/bin/java.exe
 ```
 
-The intended installable output is a Windows NSIS installer from
-`electron-builder`, normally an `.exe` in:
+The Electron build output is written to:
 
 ```text
 HITL/desktop/dist/
 ```
+
+The tested offline Windows handoff is a three-file bundle in the ignored
+`HITL/desktop/dist/installer-files/` folder:
+
+```text
+7za.exe
+HITL Academic Writing Scorer Setup 0.1.1.exe
+hitl-app.7z
+```
+
+Keep these files together. The small setup executable extracts the large
+payload and can replace the standard per-user install at
+`%LOCALAPPDATA%\Programs\hitl-academic-writing-scorer-desktop`.
 
 ## Setup On Windows
 
@@ -194,10 +218,11 @@ Expected output:
 HITL\desktop\dist\
 ```
 
-Likely installer output:
+The Electron build produces the application payload. The handoff wrapper is
+assembled from that payload and written as:
 
 ```text
-HITL\desktop\dist\HITL Academic Writing Scorer Setup 0.1.0.exe
+HITL\desktop\dist\installer-files\HITL Academic Writing Scorer Setup 0.1.1.exe
 ```
 
 ## Verification Checklist
@@ -216,6 +241,8 @@ Before calling the Windows build ready:
 10. Save a human decision and confirm the completed Excel output is rewritten.
 11. Install the generated `.exe` on a different Windows user profile or VM.
 12. Disable internet and confirm the installed app still starts and scores.
+13. Run the same setup over an existing install and confirm it replaces the
+    application without deleting `%APPDATA%` model or user-output data.
 
 ## Known Cautions
 
