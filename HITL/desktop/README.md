@@ -141,6 +141,9 @@ The tester runs the `Setup` executable. It installs the desktop app and its
 bundled Python backend, Java runtime, Ollama runtime, and Llama model store;
 the tester does not need to install Python, Java, Ollama, or the model. The
 archive and `7za.exe` are installer inputs and should not be opened or renamed.
+Running the setup again automatically replaces the previous application files,
+closes processes from the old install, and recreates the Desktop and Start Menu
+shortcuts. Per-user data under `%APPDATA%` is preserved.
 
 Generated installers, runtime copies, model files, and build outputs are
 intentionally ignored by git and are not part of source commits.

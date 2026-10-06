@@ -30,6 +30,7 @@ internal static class Program
             return Fail("Missing installer payload: " + payloadPath);
         }
 
+        StopExistingInstall(appDir);
         Directory.CreateDirectory(appDir);
         Console.WriteLine("Installing to: " + appDir);
         Console.WriteLine("Extracting application files. This can take several minutes...");
@@ -70,6 +71,73 @@ internal static class Program
         });
 
         return 0;
+    }
+
+    private static void StopExistingInstall(string appDir)
+    {
+        if (!Directory.Exists(appDir))
+        {
+            return;
+        }
+
+        Console.WriteLine("Replacing any existing installation...");
+        string appRoot = appDir.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        DateTime deadline = DateTime.UtcNow.AddSeconds(20);
+
+        while (DateTime.UtcNow < deadline)
+        {
+            bool running = false;
+            foreach (Process process in Process.GetProcesses())
+            {
+                try
+                {
+                    string executablePath = null;
+                    try
+                    {
+                        executablePath = process.MainModule.FileName;
+                    }
+                    catch
+                    {
+                        // Some system processes deny access to MainModule.
+                    }
+
+                    if (!string.IsNullOrEmpty(executablePath) &&
+                        executablePath.StartsWith(appRoot, StringComparison.OrdinalIgnoreCase))
+                    {
+                        running = true;
+                        process.Kill();
+                    }
+                }
+                catch
+                {
+                    // The process may exit between enumeration and Kill().
+                }
+                finally
+                {
+                    process.Dispose();
+                }
+            }
+
+            if (!running)
+            {
+                break;
+            }
+            System.Threading.Thread.Sleep(500);
+        }
+
+        if (!Directory.Exists(appDir))
+        {
+            return;
+        }
+
+        try
+        {
+            Directory.Delete(appDir, true);
+        }
+        catch (Exception error)
+        {
+            throw new IOException("Could not replace the existing installation. Close the app and try again.", error);
+        }
     }
 
     private static void CreateShortcuts(string appExe)
