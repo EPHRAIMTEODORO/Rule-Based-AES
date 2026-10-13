@@ -6,6 +6,18 @@ Build a download-and-open desktop app that runs entirely on the user's laptop.
 The user should not need to manually install Python, Python packages, Java,
 Ollama, Llama 3, spaCy data, or NLTK data.
 
+## Current Status
+
+The Windows build has a tested offline handoff with a bundled Python sidecar,
+Windows Ollama runtime, `llama3:8b` model store, private Java runtime, and a
+setup wrapper that replaces an existing per-user install while preserving app
+data. The next platform target is macOS on the other laptop.
+
+The Electron launcher already selects platform-specific runtime paths for
+`darwin-arm64`, `darwin-x64`, `win32-x64`, and Linux x64. Each release still
+needs native sidecar and runtime assets built on its target operating system
+and architecture.
+
 Current local app shape:
 
 ```text
@@ -132,9 +144,11 @@ later packaging phases.
 
 ### Phase 2: Runtime Freezing
 
-In progress. The Electron launcher can now use a frozen backend sidecar from
+Implemented for the Windows handoff. The Electron launcher can use a frozen
+backend sidecar from
 `HITL/desktop/backend-dist/hitl-api/`, and `npm run build:backend` creates that
-sidecar with PyInstaller.
+sidecar with PyInstaller. Repeat this phase on the Mac build machine so the
+sidecar is native to the Mac target architecture.
 
 The sidecar includes:
 
@@ -149,7 +163,8 @@ The sidecar includes:
 - project `data/awl_word_forms.json`
 - `HITL` source files
 
-Still separate from the sidecar:
+Still separate from the sidecar on each build machine until the runtime asset
+preparation step is complete:
 
 - Java runtime for LanguageTool
 - Ollama executable
@@ -157,7 +172,8 @@ Still separate from the sidecar:
 
 ### Phase 3: Local Model Packaging
 
-In progress. The Electron launcher now:
+Implemented for the tested Windows handoff and ready to repeat for macOS. The
+Electron launcher now:
 
 - creates a private app-data Ollama model directory
 - sets `OLLAMA_MODELS` before starting the backend
@@ -180,11 +196,16 @@ Package local inference:
 
 ### Phase 4: Installer and Permissions
 
-Build platform installers:
+Build platform installers per target machine:
 
 - macOS `.dmg` or signed `.pkg`
-- Windows installer
+- Windows three-file offline handoff with upgrade replacement
 - optional Linux AppImage/deb later
+
+The Windows setup wrapper closes processes from the old install folder,
+replaces the application files, preserves `%APPDATA%`, and recreates shortcuts.
+macOS should use the DMG/app bundle's normal replacement flow and must be
+tested on a clean user account.
 
 Installer must handle:
 
@@ -196,7 +217,7 @@ Installer must handle:
 
 ### Phase 5: End-to-End Offline Test
 
-On a clean device or VM with internet disabled:
+On a clean device or VM for each target platform, with internet disabled:
 
 1. Install the app.
 2. Open the app.
@@ -219,12 +240,13 @@ The packaged desktop shell should:
 - poll `/preflight` and surface missing assets
 - stop the Python backend on app exit
 
-## Backend Changes Still Needed For Packaging
+## Release Tasks Remaining
 
-- Add process-level logging to an app data log file.
-- Bundle a private Java runtime for LanguageTool.
-- Add the actual Ollama executable and model files to the runtime asset folders.
-- Review and include license/notice files for bundled runtimes and model weights.
+- Repeat sidecar, Java, Ollama, and model preparation on the Mac target laptop.
+- Produce and verify a macOS DMG for the target architecture.
+- Review and include license/notice files for bundled runtimes and model
+  weights.
+- Run a clean-machine offline packaging test for macOS.
 
 ## Packaging Risks
 
@@ -239,8 +261,8 @@ The packaged desktop shell should:
 
 ## Definition Of Packaging-Ready
 
-The app is packaging-ready when this command reports ready on a clean test
-machine without using the internet:
+The app is packaging-ready for a target platform when the target build reports
+ready on a clean test machine without using the internet:
 
 ```bash
 python "HITL/preflight.py" --json

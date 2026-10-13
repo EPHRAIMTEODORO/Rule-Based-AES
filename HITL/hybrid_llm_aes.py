@@ -12,8 +12,10 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
 import os
 import re
+import socket
 import subprocess
 import sys
 import time
@@ -70,6 +72,7 @@ LLM_FIELD_NAMES = [
     "justification",
 ]
 LLM_JSON_RETRIES = 2
+DEFAULT_LLM_TIMEOUT_SECONDS = 600
 _OLLAMA_PROCESS: Optional[subprocess.Popen] = None
 
 INTEGER_TRAIT_FIELDS = [
@@ -194,20 +197,10 @@ def extract_hitl_lexical_features(text: str) -> dict:
 def clamp_int_score(value: object, min_value: int = 1, max_value: int = 6) -> int:
     """Convert an LLM trait score to a bounded integer."""
     try:
-        numeric = int(round(float(value)))
+        numeric = math.floor(float(value) + 0.5)
     except (TypeError, ValueError):
         return min_value
     return max(min_value, min(max_value, numeric))
-
-
-def clamp_half_point_score(value: object, min_value: float = 1.0, max_value: float = 6.0) -> float:
-    """Convert an LLM recommended score to a bounded half-point value."""
-    try:
-        numeric = float(value)
-    except (TypeError, ValueError):
-        return min_value
-    numeric = max(min_value, min(max_value, numeric))
-    return round(numeric * 2) / 2
 
 
 def extract_json_object(text: str) -> dict:
@@ -354,9 +347,21 @@ def call_ollama_chat(
                 f"HTTP {exc.code}: {error_body}"
             ) from exc
         except urllib.error.URLError as exc:
+            if isinstance(exc.reason, (TimeoutError, socket.timeout)) or "timed out" in str(exc.reason).lower():
+                raise RuntimeError(
+                    f"The local model timed out after {timeout_seconds} seconds while scoring "
+                    f"this essay. The computer may be under heavy load; wait for the current "
+                    "job to finish before starting other intensive programs."
+                ) from exc
             raise RuntimeError(
                 "Could not reach Ollama. Make sure Ollama is running and the model is "
                 f"available with: ollama run {model}"
+            ) from exc
+        except (TimeoutError, socket.timeout) as exc:
+            raise RuntimeError(
+                f"The local model timed out after {timeout_seconds} seconds while scoring "
+                f"this essay. The computer may be under heavy load; wait for the current "
+                "job to finish before starting other intensive programs."
             ) from exc
 
         content = response_payload.get("message", {}).get("content", "")
@@ -381,7 +386,7 @@ def normalize_llm_result(raw_result: dict, essay_id: str) -> dict:
     for field_name in INTEGER_TRAIT_FIELDS:
         result[field_name] = clamp_int_score(raw_result.get(field_name))
 
-    result["recommended_score"] = clamp_half_point_score(
+    result["recommended_score"] = clamp_int_score(
         raw_result.get(
             "llm_recommended_score",
             raw_result.get("recommended_score", raw_result.get("overall_score")),
@@ -623,7 +628,7 @@ def parse_args() -> argparse.Namespace:
         help="Do not auto-start Ollama before scoring.",
     )
     parser.add_argument("--temperature", type=float, default=0.0)
-    parser.add_argument("--timeout", type=int, default=180)
+    parser.add_argument("--timeout", type=int, default=DEFAULT_LLM_TIMEOUT_SECONDS)
     parser.add_argument("--limit", type=int, help="Only process the first N essays.")
     parser.add_argument(
         "--delay-seconds",

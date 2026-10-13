@@ -10,10 +10,20 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import multiprocessing
 import os
+import queue
 import re
+import subprocess
+import sys
+import tempfile
 from pathlib import Path
 from typing import Optional
+
+if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+    bundled_language_tool = Path(sys._MEIPASS) / "language_tool_python_cache"
+    if bundled_language_tool.exists():
+        os.environ.setdefault("LTP_PATH", str(bundled_language_tool))
 
 if os.environ.get("JAVA_HOME"):
     os.environ["PATH"] = (
@@ -33,12 +43,12 @@ from wordfreq import zipf_frequency
 # Load heavyweight NLP resources once at module import time.
 nlp = spacy.load("en_core_web_sm")
 
-try:
-    tool: Optional[language_tool_python.LanguageTool] = (
-        language_tool_python.LanguageTool("en-US")
-    )
-except Exception:
-    tool = None
+GRAMMAR_CHECK_TIMEOUT_SECONDS = float(
+    os.environ.get("AES_GRAMMAR_CHECK_TIMEOUT_SECONDS", "20")
+)
+GRAMMAR_CLI_TIMEOUT_SECONDS = float(
+    os.environ.get("AES_GRAMMAR_CLI_TIMEOUT_SECONDS", "45")
+)
 
 
 FALLBACK_AWL_SET = {
@@ -280,15 +290,142 @@ def _grammar_errors_per_100(text: str, word_count: int) -> Optional[float]:
     if word_count == 0:
         return 0.0
 
-    if tool is None:
+    if os.name == "nt":
+        match_ids = _check_grammar_with_cli(text)
+        if match_ids is None:
+            match_ids = _check_grammar_with_timeout(text)
+    else:
+        match_ids = _check_grammar_with_timeout(text)
+        if match_ids is None:
+            match_ids = _check_grammar_with_cli(text)
+
+    if match_ids is None:
+        return None
+
+    return safe_divide(len(match_ids) * 100, word_count)
+
+
+def _language_tool_home() -> Optional[Path]:
+    """Return the bundled/local LanguageTool directory when available."""
+    configured_path = os.environ.get("LTP_PATH")
+    if not configured_path:
+        return None
+
+    root = Path(configured_path)
+    candidates = [
+        root / "LanguageTool-6.8",
+        root,
+    ]
+    for candidate in candidates:
+        if (candidate / "languagetool-commandline.jar").exists():
+            return candidate
+    return None
+
+
+def _java_command() -> str:
+    """Return the private Java executable when JAVA_HOME is configured."""
+    if os.environ.get("JAVA_HOME"):
+        java_name = "java.exe" if os.name == "nt" else "java"
+        bundled_java = Path(os.environ["JAVA_HOME"]) / "bin" / java_name
+        if bundled_java.exists():
+            return str(bundled_java)
+    return "java"
+
+
+def _check_grammar_with_cli(text: str) -> Optional[list[str]]:
+    """Run LanguageTool's non-server CLI as a Windows-safe fallback."""
+    language_tool_home = _language_tool_home()
+    if language_tool_home is None:
+        return None
+
+    input_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            suffix=".txt",
+            delete=False,
+            encoding="utf-8",
+        ) as input_file:
+            input_file.write(text)
+            input_path = input_file.name
+
+        result = subprocess.run(
+            [
+                _java_command(),
+                "-jar",
+                str(language_tool_home / "languagetool-commandline.jar"),
+                "--json",
+                "-l",
+                "en-US",
+                input_path,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=GRAMMAR_CLI_TIMEOUT_SECONDS,
+            check=False,
+        )
+    except Exception:
+        return None
+    finally:
+        if input_path:
+            try:
+                Path(input_path).unlink()
+            except OSError:
+                pass
+
+    json_start = result.stdout.find("{")
+    if result.returncode != 0 or json_start == -1:
         return None
 
     try:
-        matches = tool.check(text)
-    except Exception:
+        payload = json.loads(result.stdout[json_start:])
+    except json.JSONDecodeError:
         return None
 
-    return safe_divide(len(matches) * 100, word_count)
+    matches = payload.get("matches")
+    if not isinstance(matches, list):
+        return None
+
+    return [
+        str(match.get("rule", {}).get("id", ""))
+        for match in matches
+        if isinstance(match, dict)
+    ]
+
+
+def _grammar_check_worker(text: str, result_queue: multiprocessing.Queue) -> None:
+    """Run LanguageTool in a child process so Java startup cannot hang scoring."""
+    tool: Optional[language_tool_python.LanguageTool] = None
+    try:
+        tool = language_tool_python.LanguageTool("en-US", host="127.0.0.1")
+        result_queue.put([match.ruleId for match in tool.check(text)])
+    except Exception:
+        result_queue.put(None)
+    finally:
+        if tool is not None:
+            tool.close()
+
+
+def _check_grammar_with_timeout(text: str) -> Optional[list[str]]:
+    """Return LanguageTool match IDs, or None if startup/checking times out."""
+    context = multiprocessing.get_context("spawn")
+    result_queue = context.Queue()
+    process = context.Process(
+        target=_grammar_check_worker,
+        args=(text, result_queue),
+    )
+    process.start()
+    process.join(GRAMMAR_CHECK_TIMEOUT_SECONDS)
+
+    if process.is_alive():
+        process.terminate()
+        process.join(5)
+        return None
+
+    try:
+        return result_queue.get_nowait()
+    except queue.Empty:
+        return None
 
 
 def extract_features(text: str) -> dict:

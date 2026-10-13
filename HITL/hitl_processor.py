@@ -9,6 +9,7 @@ records that the UI can render.
 from __future__ import annotations
 
 import argparse
+import math
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -34,6 +35,7 @@ DEFAULT_PROMPT_COLUMN = "Topic"
 DEFAULT_TEXT_COLUMN = "Essay"
 DEFAULT_MODEL = "llama3:8b"
 DEFAULT_OLLAMA_URL = "http://127.0.0.1:11434/api/chat"
+DEFAULT_LLM_TIMEOUT_SECONDS = scorer.DEFAULT_LLM_TIMEOUT_SECONDS
 HUMAN_DECISION_FIELDNAMES = [
     "Rater_Final_Score",
     "Rater_Final_Placement",
@@ -42,7 +44,11 @@ HUMAN_DECISION_FIELDNAMES = [
     "Reason_Notes",
     "Decision_Updated_At",
 ]
-
+COMPLETED_SCORE_MARKERS = {
+    "llm_recommended_score",
+    "LLM_Organization_Coherence",
+    "aes_score",
+}
 ProgressCallback = Callable[[dict], None]
 
 
@@ -75,7 +81,7 @@ class ProcessorOptions:
     ollama_startup_timeout: float = 30.0
     start_ollama: bool = True
     temperature: float = 0.0
-    timeout: int = 180
+    timeout: int = DEFAULT_LLM_TIMEOUT_SECONDS
     limit: Optional[int] = None
     delay_seconds: float = 0.0
     quiet: bool = True
@@ -233,15 +239,146 @@ def write_completed_workbook(
     _write_completed_workbook(output_path, fieldnames, rows)
 
 
-def _with_initial_decision_fields(row: dict) -> dict:
-    """Add default human decision fields to a scored row."""
+def load_completed_workbook(
+    input_path: str,
+    output_path: str,
+    sheet_name: str = "Completed_Scores",
+) -> ProcessingResult:
+    """Load an already-scored workbook for human review.
+
+    The review UI saves decisions back through the same completed-workbook
+    writer used by fresh processing jobs, so this loader normalizes the workbook
+    into the same in-memory shape and ensures decision columns exist.
+    """
+    workbook = load_workbook(input_path, read_only=True, data_only=True)
+    worksheet = (
+        workbook[sheet_name]
+        if sheet_name in workbook.sheetnames
+        else workbook.worksheets[0]
+    )
+    rows = worksheet.iter_rows(values_only=True)
+
+    try:
+        header_row = next(rows)
+    except StopIteration as exc:
+        workbook.close()
+        raise ValueError("Completed workbook sheet is empty.") from exc
+
+    kept_columns = [
+        (index, scorer.normalize_cell(value))
+        for index, value in enumerate(header_row)
+        if not _is_blank_header(value)
+    ]
+    if not kept_columns:
+        workbook.close()
+        raise ValueError("Completed workbook must include a header row.")
+
+    fieldnames = [fieldname for _, fieldname in kept_columns]
+    if not any(fieldname in fieldnames for fieldname in COMPLETED_SCORE_MARKERS):
+        workbook.close()
+        raise ValueError(
+            "Review upload must be a completed workbook. Process the raw workbook first."
+        )
+
+    records = []
+    for row_values in rows:
+        if all(value is None for value in row_values):
+            continue
+
+        record = {}
+        for source_index, fieldname in kept_columns:
+            value = row_values[source_index] if source_index < len(row_values) else ""
+            record[fieldname] = scorer.normalize_cell(value)
+            if fieldname == "llm_recommended_score":
+                score = _score_value(record[fieldname])
+                if score is not None:
+                    record[fieldname] = scorer.clamp_int_score(score)
+        records.append(_with_initial_decision_fields(record))
+
+    workbook.close()
+
+    if not records:
+        raise ValueError("Completed workbook does not contain any essay rows.")
+
+    for fieldname in HUMAN_DECISION_FIELDNAMES:
+        if fieldname not in fieldnames:
+            fieldnames.append(fieldname)
+
+    _write_completed_workbook(output_path, fieldnames, records)
+    return ProcessingResult(
+        input_path=str(input_path),
+        output_path=str(output_path),
+        rows_processed=len(records),
+        columns=fieldnames,
+        records=records,
+    )
+
+
+def _score_value(value: object) -> Optional[float]:
+    """Return a finite numeric score when available."""
+    if value in {None, ""}:
+        return None
+    try:
+        score = float(value)
+    except (TypeError, ValueError):
+        return None
+    return score if math.isfinite(score) else None
+
+
+def _placement_for_final_score(score: float) -> str:
+    """Map final 1-6 scores to the approved placement labels."""
+    if score <= 3:
+        return "Pre-EIL"
+    if score == 4:
+        return "EIL 1"
+    if score == 5:
+        return "EIL 2"
+    if score == 6:
+        return "Test Out"
+    return ""
+
+
+def _with_initial_decision_fields(row: dict, pending: bool = False) -> dict:
+    """Add human decision fields without auto-finalizing fresh score results."""
+    if pending:
+        return {
+            **row,
+            "Rater_Final_Score": "",
+            "Rater_Final_Placement": "",
+            "Rater_Action": "",
+            "Decision_Status": "Pending",
+            "Reason_Notes": "",
+            "Decision_Updated_At": "",
+        }
+
+    score = _score_value(row.get("llm_recommended_score"))
+    if row.get("Rater_Final_Score") not in {None, ""}:
+        raw_final_score = _score_value(row.get("Rater_Final_Score"))
+        final_score = scorer.clamp_int_score(raw_final_score) if raw_final_score is not None else ""
+        final_placement = _placement_for_final_score(final_score) if final_score != "" else ""
+        action = row.get("Rater_Action", "")
+        status = row.get("Decision_Status") or "Finalized"
+        notes = row.get("Reason_Notes", "")
+    elif score is not None:
+        final_score = ""
+        final_placement = ""
+        action = ""
+        status = row.get("Decision_Status") or "Pending"
+        notes = row.get("Reason_Notes", "")
+    else:
+        final_score = ""
+        final_placement = ""
+        action = ""
+        status = row.get("Decision_Status") or "Pending"
+        notes = row.get("Reason_Notes", "")
+
     return {
         **row,
-        "Rater_Final_Score": row.get("Rater_Final_Score", ""),
-        "Rater_Final_Placement": row.get("Rater_Final_Placement", ""),
-        "Rater_Action": row.get("Rater_Action", ""),
-        "Decision_Status": row.get("Decision_Status") or "Pending",
-        "Reason_Notes": row.get("Reason_Notes", ""),
+        "Rater_Final_Score": final_score,
+        "Rater_Final_Placement": final_placement,
+        "Rater_Action": action,
+        "Decision_Status": status,
+        "Reason_Notes": notes,
         "Decision_Updated_At": row.get("Decision_Updated_At", ""),
     }
 
@@ -259,7 +396,7 @@ def process_workbook(
     ollama_startup_timeout: float = 30.0,
     start_ollama: bool = True,
     temperature: float = 0.0,
-    timeout: int = 180,
+    timeout: int = DEFAULT_LLM_TIMEOUT_SECONDS,
     limit: Optional[int] = None,
     delay_seconds: float = 0.0,
     quiet: bool = True,
@@ -308,11 +445,15 @@ def process_workbook(
             stage="scoring",
             current=essay_index,
             total=total,
-            message=f"Scoring essay {essay_index} of {total}",
+            message=(
+                f"Scoring essay {essay_index} of {total}. "
+                f"The local model may take up to {max(1, options.timeout // 60)} minutes."
+            ),
         )
         output_rows.append(
             _with_initial_decision_fields(
-                scorer.evaluate_row(row, scorer_args, essay_index, selected_text_column)
+                scorer.evaluate_row(row, scorer_args, essay_index, selected_text_column),
+                pending=True,
             )
         )
         if delay_seconds:
@@ -359,7 +500,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--ollama-startup-timeout", type=float, default=30.0)
     parser.add_argument("--no-start-ollama", action="store_true")
     parser.add_argument("--temperature", type=float, default=0.0)
-    parser.add_argument("--timeout", type=int, default=180)
+    parser.add_argument("--timeout", type=int, default=DEFAULT_LLM_TIMEOUT_SECONDS)
     parser.add_argument("--limit", type=int)
     parser.add_argument("--delay-seconds", type=float, default=0.0)
     parser.add_argument("--quiet", action="store_true")

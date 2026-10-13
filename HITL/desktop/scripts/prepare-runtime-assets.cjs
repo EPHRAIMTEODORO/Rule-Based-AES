@@ -83,8 +83,9 @@ function chmodExecutables(dirPath, executableNames) {
 function ollamaRuntimeSource(sourcePath) {
   const resolvedSource = fs.realpathSync(sourcePath);
   const sourceDir = path.dirname(resolvedSource);
-  const directRunner = path.join(sourceDir, "llama-server");
-  const nestedRunner = path.join(sourceDir, "lib", "ollama", "llama-server");
+  const runnerName = process.platform === "win32" ? "llama-server.exe" : "llama-server";
+  const directRunner = path.join(sourceDir, runnerName);
+  const nestedRunner = path.join(sourceDir, "lib", "ollama", runnerName);
 
   if (fs.existsSync(directRunner) || fs.existsSync(nestedRunner)) {
     return sourceDir;

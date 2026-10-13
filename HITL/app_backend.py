@@ -22,14 +22,18 @@ from typing import Optional, Union
 try:
     from .hitl_processor import (
         HUMAN_DECISION_FIELDNAMES,
+        DEFAULT_LLM_TIMEOUT_SECONDS,
         ProcessingResult,
+        load_completed_workbook,
         process_workbook,
         write_completed_workbook,
     )
 except ImportError:  # Allows `python HITL/app_backend.py ...` during local testing.
     from hitl_processor import (
         HUMAN_DECISION_FIELDNAMES,
+        DEFAULT_LLM_TIMEOUT_SECONDS,
         ProcessingResult,
+        load_completed_workbook,
         process_workbook,
         write_completed_workbook,
     )
@@ -39,7 +43,6 @@ HITL_DIR = Path(__file__).resolve().parent
 DEFAULT_OUTPUT_DIR = HITL_DIR / "outputs"
 JOB_STATUSES = {"queued", "running", "completed", "failed"}
 DECISION_FIELDNAMES = set(HUMAN_DECISION_FIELDNAMES)
-
 
 @dataclass
 class AppJob:
@@ -103,17 +106,45 @@ def _json_safe(value: object) -> object:
 
 
 def _normalize_final_score(value: object) -> object:
-    """Normalize a human final score to a 1-6 half-point value."""
+    """Normalize a human final score to a whole number from 1 through 6."""
     if value is None or value == "":
         return ""
     try:
         numeric = float(value)
     except (TypeError, ValueError) as exc:
-        raise ValueError("Rater_Final_Score must be a number from 1 to 6.") from exc
+        raise ValueError("Rater_Final_Score must be a whole number from 1 to 6.") from exc
     if not math.isfinite(numeric):
-        raise ValueError("Rater_Final_Score must be a finite number from 1 to 6.")
-    numeric = max(1.0, min(6.0, numeric))
-    return round(numeric * 2) / 2
+        raise ValueError("Rater_Final_Score must be a finite whole number from 1 to 6.")
+    if not numeric.is_integer() or not 1 <= numeric <= 6:
+        raise ValueError("Rater_Final_Score must be a whole number from 1 to 6.")
+    return int(numeric)
+
+
+def _record_score(value: object) -> Optional[float]:
+    """Return a finite numeric score from a result record when present."""
+    if value in {None, ""}:
+        return None
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return None
+    return numeric if math.isfinite(numeric) else None
+
+
+def _placement_for_score(value: object) -> str:
+    """Map a final score to the approved placement label."""
+    score = _record_score(value)
+    if score is None:
+        return ""
+    if score <= 3:
+        return "Pre-EIL"
+    if score == 4:
+        return "EIL 1"
+    if score == 5:
+        return "EIL 2"
+    if score == 6:
+        return "Test Out"
+    return ""
 
 
 def _normalize_decision_payload(decision: dict) -> dict:
@@ -128,7 +159,7 @@ def _normalize_decision_payload(decision: dict) -> dict:
             normalized["Rater_Final_Score"]
         )
     if normalized.get("Rater_Final_Score") not in {None, ""}:
-        normalized["Decision_Status"] = normalized.get("Decision_Status") or "Finalized"
+        normalized["Decision_Status"] = "Finalized"
     elif any(normalized.get(key) for key in DECISION_FIELDNAMES - {"Decision_Status"}):
         normalized["Decision_Status"] = normalized.get("Decision_Status") or "Review"
     else:
@@ -217,7 +248,7 @@ def start_job(
     ollama_startup_timeout: float = 30.0,
     start_ollama: bool = True,
     temperature: float = 0.0,
-    timeout: int = 180,
+    timeout: int = DEFAULT_LLM_TIMEOUT_SECONDS,
     limit: Optional[int] = None,
     delay_seconds: float = 0.0,
     quiet: bool = True,
@@ -254,6 +285,51 @@ def start_job(
         daemon=True,
     )
     thread.start()
+    return job_id
+
+
+def load_review_workbook(
+    input_path: str,
+    output_dir: Union[str, Path] = DEFAULT_OUTPUT_DIR,
+) -> str:
+    """Load a completed workbook as a review-ready job and return its job ID."""
+    job_id, output_path = _create_output_path(input_path, output_dir)
+    job = AppJob(
+        job_id=job_id,
+        input_path=str(input_path),
+        output_path=output_path,
+        status="running",
+        progress={"stage": "loading", "message": "Loading completed workbook"},
+    )
+
+    with _JOBS_LOCK:
+        _JOBS[job_id] = job
+
+    try:
+        result = load_completed_workbook(input_path, output_path)
+    except Exception as exc:
+        _set_job_state(
+            job_id,
+            status="failed",
+            error=str(exc),
+            error_type=type(exc).__name__,
+            traceback=traceback.format_exc(),
+            progress={"stage": "failed", "message": str(exc)},
+        )
+        raise
+
+    result_payload = _json_safe(result.to_dict())
+    _set_job_state(
+        job_id,
+        status="completed",
+        result=result_payload,
+        progress={
+            "stage": "complete",
+            "message": "Completed workbook loaded for review",
+            "rows_processed": result.rows_processed,
+            "output_path": result.output_path,
+        },
+    )
     return job_id
 
 
@@ -300,6 +376,9 @@ def update_job_decision(job_id: str, row_index: int, decision: dict) -> dict:
             raise IndexError(f"row_index {row_index} is outside the result rows.")
 
         normalized_decision = _normalize_decision_payload(decision)
+        placement = _placement_for_score(normalized_decision.get("Rater_Final_Score"))
+        if placement:
+            normalized_decision["Rater_Final_Placement"] = placement
         records[row_index].update(normalized_decision)
         for fieldname in HUMAN_DECISION_FIELDNAMES:
             if fieldname not in columns:

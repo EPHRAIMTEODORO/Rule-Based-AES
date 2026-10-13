@@ -1,6 +1,6 @@
 {
   "name": "hitl-academic-writing-scorer-desktop",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Offline Electron shell for the HITL Academic Writing Scorer.",
   "author": "HITL Academic Writing Scorer",
@@ -58,7 +58,12 @@
         "from": "runtime-assets/ollama",
         "to": "ollama",
         "filter": [
-          "**/*"
+          "**/*",
+          "!**/cuda_v*/**/*",
+          "!**/rocm*/**/*",
+          "!**/ollama app.exe",
+          "!**/unins*",
+          "!**/app.ico"
         ]
       },
       {
@@ -72,6 +77,14 @@
         "from": "runtime-assets/ollama-models",
         "to": "ollama-models",
         "filter": [
+          "**/*",
+          "!blobs/sha256-6a0746a1ec1aef3e7ec53868f220ff6e389f6f8ef87a01d77c96807de94ca2aa"
+        ]
+      },
+      {
+        "from": "runtime-assets/ollama-model-chunks",
+        "to": "ollama-model-chunks",
+        "filter": [
           "**/*"
         ]
       }
@@ -83,6 +96,8 @@
       ]
     },
     "win": {
+      "icon": "build/icon.ico",
+      "signAndEditExecutable": false,
       "target": [
         "nsis"
       ]

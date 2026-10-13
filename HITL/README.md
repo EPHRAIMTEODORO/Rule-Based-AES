@@ -42,6 +42,13 @@ PACKAGING_PLAN.md
 runtime_manifest.json
 ```
 
+Platform build handoffs:
+
+```text
+WINDOWS_HANDOFF.md
+MAC_HANDOFF.md
+```
+
 ## Design Goal
 
 The current rule-based AES script captures measurable language features, but it
@@ -186,8 +193,8 @@ updated_row = update_job_decision(
     job_id,
     row_index=0,
     decision={
-        "Rater_Final_Score": 4.5,
-        "Rater_Final_Placement": "Advanced II",
+        "Rater_Final_Score": 5,
+        "Rater_Final_Placement": "EIL 2",
         "Rater_Action": "Override score",
         "Reason_Notes": "Human rater found stronger organization than the model.",
     },
@@ -232,9 +239,11 @@ npm start
 
 The Electron shell starts the local Python API server automatically, waits for
 `/health`, opens the dashboard, stores uploads/outputs in the app-data folder,
-and stops the backend when the desktop app exits. Packaged builds now use a
-PyInstaller Python sidecar. They still need bundled Java, Ollama, and model
-assets before they are fully self-contained for end users.
+and stops the backend when the desktop app exits. Packaged builds use a
+PyInstaller Python sidecar plus target-platform Java, Ollama, and model assets.
+The tested Windows handoff is fully offline and can replace an existing
+per-user install while preserving app data. macOS packaging is documented in
+[`MAC_HANDOFF.md`](MAC_HANDOFF.md) and must be built on the target Mac.
 
 The default server listens on `http://127.0.0.1:8765` and serves the prototype
 UI at that same address.
@@ -285,8 +294,8 @@ await fetch(`http://127.0.0.1:8765${created.status_url}/decision`, {
   body: JSON.stringify({
     row_index: 0,
     decision: {
-      Rater_Final_Score: "4.5",
-      Rater_Final_Placement: "Advanced II",
+      Rater_Final_Score: "5",
+      Rater_Final_Placement: "EIL 2",
       Rater_Action: "Override score",
       Reason_Notes: "Human rater found stronger organization than the model.",
     },
@@ -306,12 +315,25 @@ Reason_Notes
 Decision_Updated_At
 ```
 
-The included UI in `HITL/ui/index.html` uses this same flow: upload workbook,
-poll status, collapse setup after processing, show a review dashboard, let the
-rater move through one essay at a time, flag model/indicator mismatches, jump
-to the next pending essay, save final decisions, and expose the completed
-workbook download link. Its sample button calls `/sample-job`, so packaged app
-users do not need to know where the sample workbook lives on disk.
+Freshly processed rows are always `Pending`: processing writes the system
+recommendation and evidence, but does not write a human final score or mark a
+row `Finalized`. The rater can choose a whole-number final score from `1`
+through `6`, or use `Accept System Decision` to accept the model recommendation.
+Final placement uses the approved HITL rule: scores `1` through `3` are
+`Pre-EIL`; `4` is `EIL 1`; `5` is `EIL 2`; and `6` is `Test Out`.
+
+The local model has a ten-minute per-essay response limit by default because
+Llama 3 can be slow on CPU-only or busy computers. API callers can override it
+with the `timeout` field, in seconds. The UI displays that the model may take
+several minutes and shows a specific message when the limit is exceeded.
+
+The included UI in `HITL/ui/index.html` uses a two-step flow: process a raw
+workbook and download the completed workbook, then load a completed workbook
+for essay-by-essay review. The review dashboard lets the rater move through one
+essay at a time, flag model/indicator mismatches, jump to the next pending
+essay, save final decisions, and expose the updated workbook download link. Its
+sample button calls `/sample-job`, so packaged app users do not need to know
+where the sample workbook lives on disk.
 
 For a quick test on only a few essays:
 
@@ -431,8 +453,8 @@ These columns are produced by local Llama 3 using the ESL placement rubric:
   readers who are not used to learner writing.
 - `llm_grammar_meaning_impact`: Whether grammar and vocabulary errors interfere
   with meaning. This is different from counting grammar errors.
-- `llm_recommended_score`: Llama 3's recommended placement score on the human
-  1-6 scale, allowing half-points.
+- `llm_recommended_score`: Llama 3's recommended whole-number placement score
+  on the human 1-6 scale.
 - `llm_justification`: Short evidence-based explanation for the LLM rubric
   scores.
 

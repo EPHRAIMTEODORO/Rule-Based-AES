@@ -1,11 +1,13 @@
 const { spawnSync } = require("child_process");
 const fs = require("fs");
+const os = require("os");
 const path = require("path");
 
 const desktopDir = path.resolve(__dirname, "..");
 const repoRoot = path.resolve(desktopDir, "..", "..");
 const hitlDir = path.join(repoRoot, "HITL");
 const dataDir = path.join(repoRoot, "data");
+const languageToolCacheDir = path.join(os.homedir(), ".cache", "language_tool_python");
 const entryScript = path.join(hitlDir, "local_api_server.py");
 const distPath = path.join(desktopDir, "backend-dist");
 const buildPath = path.join(desktopDir, "backend-build");
@@ -119,6 +121,7 @@ function main() {
     ],
     en_core_web_sm: [["--collect-all", "en_core_web_sm"]],
     wordfreq: [["--collect-data", "wordfreq"]],
+    lexical_diversity: [["--collect-data", "lexical_diversity"]],
     language_tool_python: [["--collect-data", "language_tool_python"]],
     nltk: [["--collect-data", "nltk"]],
     openpyxl: [["--collect-data", "openpyxl"]],
@@ -128,6 +131,12 @@ function main() {
     if (moduleAvailable(python, moduleName)) {
       options.forEach((option) => args.push(...option));
     }
+  }
+
+  if (fs.existsSync(languageToolCacheDir)) {
+    args.push("--add-data", addDataArg(languageToolCacheDir, "language_tool_python_cache"));
+  } else {
+    console.warn(`LanguageTool cache was not found at ${languageToolCacheDir}; packaged grammar checks may need network on first use.`);
   }
 
   args.push(entryScript);

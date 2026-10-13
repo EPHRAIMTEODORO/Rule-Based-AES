@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import cgi
 import json
+import multiprocessing
 import mimetypes
 import shutil
 import sys
@@ -36,10 +37,12 @@ if str(THIS_DIR) not in sys.path:
 from HITL import (  # noqa: E402
     get_job_result,
     get_job_status,
+    load_review_workbook,
     run_preflight,
     start_job,
     update_job_decision,
 )
+from HITL.hitl_processor import DEFAULT_LLM_TIMEOUT_SECONDS  # noqa: E402
 import hybrid_llm_aes as scorer  # noqa: E402
 
 
@@ -269,6 +272,10 @@ class HITLRequestHandler(BaseHTTPRequestHandler):
                 self._shutdown_server()
                 return
 
+            if parsed.path == "/review-workbook":
+                self._load_review_workbook()
+                return
+
             if len(path_parts) == 3 and path_parts[0] == "jobs" and path_parts[2] == "decision":
                 self._update_job_decision(path_parts[1])
                 return
@@ -346,6 +353,7 @@ class HITLRequestHandler(BaseHTTPRequestHandler):
             ollama_command=DEFAULT_OLLAMA_COMMAND,
             ollama_startup_timeout=DEFAULT_OLLAMA_STARTUP_TIMEOUT,
             start_ollama=True,
+            timeout=DEFAULT_LLM_TIMEOUT_SECONDS,
             limit=1,
         )
         status = _status_with_urls(get_job_status(job_id))
@@ -377,10 +385,31 @@ class HITLRequestHandler(BaseHTTPRequestHandler):
                 _field_value(form, "ollama_startup_timeout", DEFAULT_OLLAMA_STARTUP_TIMEOUT)
             ),
             start_ollama=str(_field_value(form, "start_ollama", "true")).lower() != "false",
+            timeout=int(_field_value(form, "timeout", DEFAULT_LLM_TIMEOUT_SECONDS)),
             limit=_optional_int(_field_value(form, "limit")),
         )
         status = _status_with_urls(get_job_status(job_id))
         _json_response(self, HTTPStatus.ACCEPTED, status)
+
+    def _load_review_workbook(self) -> None:
+        """Load an already-completed workbook into the review dashboard."""
+        content_type = self.headers.get("Content-Type", "")
+        if not content_type.startswith("multipart/form-data"):
+            raise ValueError("Review workbook uploads must use multipart/form-data.")
+
+        form = cgi.FieldStorage(
+            fp=self.rfile,
+            headers=self.headers,
+            environ={
+                "REQUEST_METHOD": "POST",
+                "CONTENT_TYPE": content_type,
+                "CONTENT_LENGTH": self.headers.get("Content-Length", "0"),
+            },
+        )
+        input_path = _save_uploaded_file(form)
+        job_id = load_review_workbook(input_path=input_path, output_dir=OUTPUT_DIR)
+        status = _status_with_urls(get_job_status(job_id))
+        _json_response(self, HTTPStatus.OK, status)
 
     def _create_job_from_json(self) -> None:
         """Create a job from an already-local workbook path."""
@@ -408,6 +437,7 @@ class HITLRequestHandler(BaseHTTPRequestHandler):
                 DEFAULT_OLLAMA_STARTUP_TIMEOUT,
             ),
             start_ollama=payload.get("start_ollama", True) is not False,
+            timeout=int(payload.get("timeout", DEFAULT_LLM_TIMEOUT_SECONDS)),
             limit=payload.get("limit"),
         )
         status = _status_with_urls(get_job_status(job_id))
@@ -479,4 +509,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    multiprocessing.freeze_support()
     main()
