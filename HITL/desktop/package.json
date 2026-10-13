@@ -77,8 +77,7 @@
         "from": "runtime-assets/ollama-models",
         "to": "ollama-models",
         "filter": [
-          "**/*",
-          "!blobs/sha256-6a0746a1ec1aef3e7ec53868f220ff6e389f6f8ef87a01d77c96807de94ca2aa"
+          "**/*"
         ]
       },
       {
