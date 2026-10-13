@@ -312,10 +312,14 @@ def _language_tool_home() -> Optional[Path]:
         return None
 
     root = Path(configured_path)
-    candidates = [
-        root / "LanguageTool-6.8",
-        root,
-    ]
+    candidates = [root]
+    try:
+        candidates.extend(
+            sorted(candidate for candidate in root.iterdir() if candidate.is_dir())
+        )
+    except OSError:
+        return None
+
     for candidate in candidates:
         if (candidate / "languagetool-commandline.jar").exists():
             return candidate
@@ -497,15 +501,28 @@ def normalize(
     return normalized
 
 
-def compute_score(features: dict) -> float:
-    """Compute a transparent weighted score from selected features."""
-    score = (
-        normalize(features.get("mtld"), 20, 100) * 0.25
-        + normalize(features.get("awl_ratio"), 0, 0.20) * 0.30
-        + normalize(features.get("avg_word_freq"), 2, 6, invert=True) * 0.20
-        + normalize(features.get("grammar_errors_per_100"), 0, 20, invert=True) * 0.25
+def compute_score(features: dict) -> Optional[float]:
+    """Compute a weighted score, excluding unavailable feature components."""
+    components = [
+        (features.get("mtld"), 20, 100, False, 0.25),
+        (features.get("awl_ratio"), 0, 0.20, False, 0.30),
+        (features.get("avg_word_freq"), 2, 6, True, 0.20),
+        (features.get("grammar_errors_per_100"), 0, 20, True, 0.25),
+    ]
+    available_components = [
+        (value, min_val, max_val, invert, weight)
+        for value, min_val, max_val, invert, weight in components
+        if value is not None
+    ]
+    if not available_components:
+        return None
+
+    total_weight = sum(weight for *_, weight in available_components)
+    score = sum(
+        normalize(value, min_val, max_val, invert=invert) * weight
+        for value, min_val, max_val, invert, weight in available_components
     )
-    return round(score * 100, DECIMAL_PLACES)
+    return round(score / total_weight * 100, DECIMAL_PLACES)
 
 
 def evaluate_essay(text: str) -> dict:
