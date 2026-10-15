@@ -1,5 +1,8 @@
 # Windows Handoff For HITL Desktop Packaging
 
+The next Windows release is **0.1.2**. It includes the LanguageTool path fix,
+the missing-grammar-score handling fix, and the bundled-model packaging change.
+
 This handoff is for building and testing the HITL Academic Writing Scorer
 desktop app on Windows. For the Mac build planned on the other laptop, use
 [`MAC_HANDOFF.md`](MAC_HANDOFF.md); runtime binaries and Python sidecars must
@@ -24,6 +27,9 @@ The repo on `main` already includes:
 The Windows production handoff has been verified with a bundled Python sidecar,
 Windows Ollama runtime, local `llama3:8b` model store, private Java runtime,
 offline startup, workbook processing, and upgrade-over-existing-install.
+
+The source fixes are on `main`. Pull `main` immediately before building so the
+new installer includes the latest backend and scoring code.
 
 The shared launcher also has platform paths for macOS ARM64 and x64. Build the
 Mac sidecar and runtime assets on the Mac laptop itself; do not copy Windows
@@ -74,6 +80,7 @@ cd "C:\Path\To\Rule-Based-AES"
 git checkout main
 git pull origin main
 git status
+git log -1 --oneline
 ```
 
 Before building, confirm these files exist:
@@ -112,7 +119,7 @@ The tested offline Windows handoff is a three-file bundle in the ignored
 
 ```text
 7za.exe
-HITL Academic Writing Scorer Setup 0.1.1.exe
+HITL Academic Writing Scorer Setup 0.1.2.exe
 hitl-app.7z
 ```
 
@@ -212,6 +219,10 @@ Create the Windows installable:
 npm run dist:win
 ```
 
+The package version in `HITL\desktop\package.json` should report `0.1.2`
+before building. If an older `dist` folder is present, keep the generated
+0.1.2 files together and do not mix them with an older installer bundle.
+
 Expected output:
 
 ```text
@@ -222,7 +233,7 @@ The Electron build produces the application payload. The handoff wrapper is
 assembled from that payload and written as:
 
 ```text
-HITL\desktop\dist\installer-files\HITL Academic Writing Scorer Setup 0.1.1.exe
+HITL\desktop\dist\installer-files\HITL Academic Writing Scorer Setup 0.1.2.exe
 ```
 
 ## Verification Checklist
