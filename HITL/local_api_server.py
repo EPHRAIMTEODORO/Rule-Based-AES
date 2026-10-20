@@ -10,8 +10,10 @@ from __future__ import annotations
 import argparse
 import cgi
 import json
+import logging
 import multiprocessing
 import mimetypes
+import os
 import shutil
 import sys
 import threading
@@ -20,6 +22,8 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Optional
+from types import SimpleNamespace
+import urllib.request
 from urllib.parse import urlparse
 
 
@@ -38,6 +42,7 @@ from HITL import (  # noqa: E402
     get_job_result,
     get_job_status,
     load_review_workbook,
+    list_jobs,
     run_preflight,
     start_job,
     update_job_decision,
@@ -57,6 +62,7 @@ OUTPUT_DIR = THIS_DIR / "outputs"
 UI_INDEX = THIS_DIR / "ui" / "index.html"
 SAMPLE_WORKBOOK = THIS_DIR / "Essays.xlsx"
 OLLAMA_MODELS_DIR: Optional[Path] = None
+MANAGED_OLLAMA = False
 ALLOWED_EXTENSIONS = {".xlsx"}
 ALLOWED_ORIGINS = {
     "http://127.0.0.1:8765",
@@ -154,11 +160,13 @@ def configure_runtime_paths(
     ollama_command: Optional[str] = None,
     ollama_startup_timeout: Optional[float] = None,
     ollama_models_dir: Optional[str] = None,
+    managed_ollama: Optional[bool] = None,
 ) -> None:
     """Configure writable and bundled resource paths for desktop launchers."""
     global DEFAULT_MODEL, DEFAULT_OLLAMA_URL, DEFAULT_OLLAMA_COMMAND
     global DEFAULT_OLLAMA_STARTUP_TIMEOUT, OLLAMA_MODELS_DIR
     global UPLOAD_DIR, OUTPUT_DIR, SAMPLE_WORKBOOK
+    global MANAGED_OLLAMA
 
     if upload_dir:
         UPLOAD_DIR = Path(upload_dir).expanduser().resolve()
@@ -176,6 +184,40 @@ def configure_runtime_paths(
         DEFAULT_OLLAMA_STARTUP_TIMEOUT = ollama_startup_timeout
     if ollama_models_dir:
         OLLAMA_MODELS_DIR = Path(ollama_models_dir).expanduser().resolve()
+    if managed_ollama is not None:
+        MANAGED_OLLAMA = managed_ollama
+        os.environ["HITL_OLLAMA_MANAGED"] = "1" if managed_ollama else "0"
+        os.environ["HITL_OLLAMA_URL"] = DEFAULT_OLLAMA_URL
+        if managed_ollama and OLLAMA_MODELS_DIR:
+            os.environ["OLLAMA_MODELS"] = str(OLLAMA_MODELS_DIR)
+
+
+def runtime_args() -> SimpleNamespace:
+    return SimpleNamespace(
+        ollama_url=DEFAULT_OLLAMA_URL, ollama_command=DEFAULT_OLLAMA_COMMAND,
+        ollama_startup_timeout=DEFAULT_OLLAMA_STARTUP_TIMEOUT,
+        managed_ollama=MANAGED_OLLAMA, quiet=True,
+    )
+
+
+def runtime_info() -> dict:
+    """Describe the actual endpoint rather than implying the configured binary is active."""
+    version_url = DEFAULT_OLLAMA_URL.rsplit("/api/", 1)[0] + "/api/version"
+    version = None
+    try:
+        with urllib.request.urlopen(version_url, timeout=2) as response:
+            payload = json.load(response)
+            if isinstance(payload, dict):
+                version = payload.get("version")
+    except Exception:
+        pass
+    return {
+        "app_version": os.environ.get("HITL_APP_VERSION", "development"),
+        "ollama_endpoint": DEFAULT_OLLAMA_URL,
+        "ollama_version": version,
+        "mode": "app-owned" if MANAGED_OLLAMA else "external",
+        "configured_executable": DEFAULT_OLLAMA_COMMAND,
+    }
 
 
 class HITLRequestHandler(BaseHTTPRequestHandler):
@@ -205,21 +247,23 @@ class HITLRequestHandler(BaseHTTPRequestHandler):
                 return
 
             if parsed.path == "/health":
-                _json_response(self, HTTPStatus.OK, {"status": "ok"})
+                _json_response(self, HTTPStatus.OK, {
+                    "status": "ok", "app_version": os.environ.get("HITL_APP_VERSION", "development"),
+                })
                 return
 
             if parsed.path == "/preflight":
                 _json_response(
                     self,
                     HTTPStatus.OK,
-                    run_preflight(
+                    {**run_preflight(
                         model=DEFAULT_MODEL,
                         ollama_url=DEFAULT_OLLAMA_URL,
                         ollama_command=DEFAULT_OLLAMA_COMMAND,
                         ollama_models_dir=OLLAMA_MODELS_DIR,
                         upload_dir=UPLOAD_DIR,
                         output_dir=OUTPUT_DIR,
-                    ).to_dict(),
+                    ).to_dict(), "runtime": runtime_info()},
                 )
                 return
 
@@ -264,6 +308,19 @@ class HITLRequestHandler(BaseHTTPRequestHandler):
         path_parts = [part for part in parsed.path.split("/") if part]
 
         try:
+            if parsed.path == "/inference-check":
+                if any(job["status"] in {"queued", "running"} for job in list_jobs()):
+                    raise RuntimeError("Wait for workbook processing to finish before testing scoring.")
+                scorer.call_ollama_chat(
+                    system_prompt="Return a JSON object only.",
+                    user_prompt='Reply with {"ok": true}.',
+                    model=DEFAULT_MODEL, ollama_url=DEFAULT_OLLAMA_URL,
+                    temperature=0, timeout_seconds=120, num_predict=32,
+                    recovery_callback=lambda remaining: scorer.recover_ollama(runtime_args(), remaining),
+                )
+                _json_response(self, HTTPStatus.OK, {"ok": True, "runtime": runtime_info()})
+                return
+
             if parsed.path == "/sample-job":
                 self._create_sample_job()
                 return
@@ -477,12 +534,14 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--ollama-command", default=DEFAULT_OLLAMA_COMMAND)
     parser.add_argument("--ollama-startup-timeout", type=float, default=DEFAULT_OLLAMA_STARTUP_TIMEOUT)
     parser.add_argument("--ollama-models-dir", default=None)
+    parser.add_argument("--managed-ollama", action="store_true")
     return parser.parse_args()
 
 
 def main() -> None:
     """Run the local HTTP API server."""
     args = _parse_args()
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     configure_runtime_paths(
         upload_dir=args.upload_dir,
         output_dir=args.output_dir,
@@ -492,11 +551,19 @@ def main() -> None:
         ollama_command=args.ollama_command,
         ollama_startup_timeout=args.ollama_startup_timeout,
         ollama_models_dir=args.ollama_models_dir,
+        managed_ollama=args.managed_ollama,
     )
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     if OLLAMA_MODELS_DIR:
         OLLAMA_MODELS_DIR.mkdir(parents=True, exist_ok=True)
+    logging.getLogger(__name__).info(
+        "Backend app=%s model=%s endpoint=%s executable=%s managed=%s",
+        os.environ.get("HITL_APP_VERSION", "development"), DEFAULT_MODEL,
+        DEFAULT_OLLAMA_URL, DEFAULT_OLLAMA_COMMAND, MANAGED_OLLAMA,
+    )
+    if MANAGED_OLLAMA:
+        scorer.start_ollama_if_needed(runtime_args())
     server = ThreadingHTTPServer((args.host, args.port), HITLRequestHandler)
     print(f"HITL local API listening on http://{args.host}:{args.port}", flush=True)
     try:

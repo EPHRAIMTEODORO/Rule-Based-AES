@@ -6,14 +6,12 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardCheck,
-  Database,
   FileText,
   Gauge,
   ListChecks,
   Save,
   Search,
   Send,
-  Sparkles,
 } from "lucide-react";
 import aesCases from "./data/aesCases.json";
 import "./styles.css";
@@ -262,6 +260,8 @@ function App() {
   const rubricScores = useMemo(() => buildRubricScores(currentCase), [currentCase]);
   const isAligned = isCaseAligned(currentCase);
   const completedCount = Object.values(decisions).filter((decision) => decision.completed).length;
+  const needsReviewCount = prioritizedCases.filter((item) => !isCaseAligned(item)).length;
+  const alignedCount = prioritizedCases.length - needsReviewCount;
 
   function updateDecision(patch: Partial<DecisionState>) {
     setDecisions((current) => ({
@@ -287,33 +287,21 @@ function App() {
         <div className="brand-lockup">
           <div className="brand-mark">AES</div>
           <div>
-            <h1>Human Review Console</h1>
-            <p>Hybrid scoring prototype</p>
+            <h1>Review Console</h1>
+            <p>Human-in-the-loop scoring</p>
           </div>
         </div>
-
-        <nav className="workflow">
-          <a className="workflow-step active" href="#essay">
-            <FileText size={18} /> Essay
-          </a>
-          <a className="workflow-step" href="#scores">
-            <Gauge size={18} /> Analysis
-          </a>
-          <a className="workflow-step" href="#decision">
-            <ClipboardCheck size={18} /> Decision
-          </a>
-        </nav>
 
         <section className="queue-panel" aria-label="Essay review queue">
           <div className="queue-heading">
             <div>
               <div className="case-picker-heading">
                 <ListChecks size={18} />
-                <strong>Essay queue</strong>
+                <strong>Queue</strong>
               </div>
-              <small>{completedCount} completed</small>
+              <small>{filteredCases.length} visible</small>
             </div>
-            <span>{cases.length}</span>
+            <span>{completedCount}/{cases.length}</span>
           </div>
 
           <label className="search-field">
@@ -362,31 +350,25 @@ function App() {
                     <small>{item.promptId}</small>
                   </span>
                   <em className={`queue-status ${status.toLowerCase().replace(" ", "-")}`}>{status}</em>
-                  <small>Gap {displayNumber(item.agreementGap)}</small>
+                  <small className="queue-gap">Gap {displayNumber(item.agreementGap)}</small>
                 </button>
               );
             })}
             {filteredCases.length === 0 && <p className="empty-queue">No essays match this view.</p>}
           </div>
 
-          <small>Showing {Math.min(filteredCases.length, 120)} of {filteredCases.length} matching essays.</small>
+          <small>Showing {Math.min(filteredCases.length, 120)} matching essays.</small>
         </section>
-
-        <div className="case-summary">
-          <span>Case ID</span>
-          <strong>{currentCase.essayId}</strong>
-          <span>Prompt</span>
-          <strong>{currentCase.promptId}</strong>
-          <span>Agreement status</span>
-          <strong className={isAligned ? "status-good" : "status-warning"}>{statusForCase(currentCase, currentDecision)}</strong>
-        </div>
       </aside>
 
       <section className="content">
         <header className="topbar">
           <div>
             <p className="eyebrow">Reviewer workspace</p>
-            <h2>Feature analysis + LLM scoring + human final decision</h2>
+            <h2>{currentCase.essayId}</h2>
+            <p className="topbar-subtitle">
+              {currentCase.promptId} | Group {currentCase.group} | {displayNumber(currentCase.featureMeasures.wordCount, 0)} words
+            </p>
           </div>
           <div className="topbar-actions">
             <div className="progress-chip">
@@ -410,15 +392,48 @@ function App() {
           </div>
         </header>
 
+        <section className="status-strip" aria-label="Review summary">
+          <div>
+            <span>Status</span>
+            <strong className={isAligned ? "status-good" : "status-warning"}>{statusForCase(currentCase, currentDecision)}</strong>
+          </div>
+          <div>
+            <span>Baseline</span>
+            <strong>{displayNumber(currentCase.sourceScore)}</strong>
+          </div>
+          <div>
+            <span>LLM score</span>
+            <strong>{displayNumber(currentCase.llmOverallScore)}</strong>
+          </div>
+          <div>
+            <span>Gap</span>
+            <strong>{displayNumber(currentCase.agreementGap)}</strong>
+          </div>
+          <div>
+            <span>Queue health</span>
+            <strong>{needsReviewCount} review | {alignedCount} aligned</strong>
+          </div>
+        </section>
+
+        <section className="guideline-card" aria-label="Review guideline">
+          <div>
+            <p className="eyebrow">Review guideline</p>
+            <h3>Use the evidence to support, not replace, the human score.</h3>
+          </div>
+          <ol>
+            <li>Read the essay before reviewing model scores.</li>
+            <li>Compare the feature baseline, LLM evaluation, and agreement gap.</li>
+            <li>Use feature analysis and rubric notes to explain the final decision.</li>
+          </ol>
+        </section>
+
         <div className="review-grid">
           <section className="panel essay-panel" id="essay">
             <div className="section-heading">
               <FileText size={20} />
               <div>
                 <h3>Student Essay</h3>
-                <p>
-                  {currentCase.promptId} | Group {currentCase.group} | {displayNumber(currentCase.featureMeasures.wordCount, 0)} words
-                </p>
+                <p>Read first, then compare the scoring evidence.</p>
               </div>
             </div>
             <article className="essay-text">
@@ -430,8 +445,8 @@ function App() {
             <div className="section-heading">
               <Gauge size={20} />
               <div>
-                <h3>Scores and Measures</h3>
-                <p>Signals loaded from full_sample_aes_features_with_grammar_llm_improved.xlsx.</p>
+                <h3>Feature Analysis</h3>
+                <p>Primary score comparison, feature measures, and rubric notes for this essay.</p>
               </div>
             </div>
 
@@ -465,28 +480,29 @@ function App() {
               </div>
             </div>
 
-            <div className="measure-grid">
-              {measures.map((measure) => (
-                <div className="measure" key={measure.label}>
-                  <div>
-                    <span>{measure.label}</span>
-                    <strong>{measure.value}</strong>
-                  </div>
-                  <em className={`band ${measure.band}`}>{bandLabel(measure.band)}</em>
-                  <small>{measure.benchmark}</small>
-                </div>
-              ))}
+            <div className="llm-justification">
+              <span>LLM analysis</span>
+              <p>{currentCase.llmJustification}</p>
             </div>
 
-            <div className="llm-justification">
-              <div className="section-heading compact">
-                <Database size={18} />
-                <div>
-                  <h3>LLM Analysis</h3>
-                  <p>{currentCase.llmJustification}</p>
-                </div>
+            <section className="feature-analysis" aria-label="Feature analysis measures">
+              <div className="subsection-heading">
+                <h4>Feature measures</h4>
+                <p>Signals used to help reviewers inspect development, cohesion, vocabulary, and grammar.</p>
               </div>
-            </div>
+              <div className="measure-grid">
+                {measures.map((measure) => (
+                  <div className="measure" key={measure.label}>
+                    <div>
+                      <span>{measure.label}</span>
+                      <strong>{measure.value}</strong>
+                    </div>
+                    <em className={`band ${measure.band}`}>{bandLabel(measure.band)}</em>
+                    <small>{measure.benchmark}</small>
+                  </div>
+                ))}
+              </div>
+            </section>
 
             <div className="rubric-table" role="table" aria-label="LLM rubric scores">
               <div className="rubric-row rubric-head" role="row">
@@ -508,8 +524,8 @@ function App() {
             <div className="section-heading">
               <ClipboardCheck size={20} />
               <div>
-                <h3>Final Human Decision</h3>
-                <p>Reviewer confirms, adjusts, or routes the case for second review.</p>
+                <h3>Final Decision</h3>
+                <p>Confirm, adjust, or route for another human review.</p>
               </div>
             </div>
 
@@ -589,7 +605,7 @@ function App() {
                   })
                 }
               >
-                <Sparkles size={18} /> Draft note
+                <Save size={18} /> Save draft
               </button>
               <button className="primary-button" onClick={() => updateDecision({ completed: true })}>
                 <Send size={18} /> Submit decision

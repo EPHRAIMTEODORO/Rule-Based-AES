@@ -7,13 +7,11 @@ const path = require("path");
 
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 8765;
-const DEFAULT_OLLAMA_PORT = 11434;
-const HEALTH_TIMEOUT_MS = 30000;
+const HEALTH_TIMEOUT_MS = 90000;
 const DEFAULT_MODEL = "llama3:8b";
 
 let mainWindow = null;
 let backendProcess = null;
-let ollamaProcess = null;
 let backendPort = null;
 let backendLogStream = null;
 
@@ -259,62 +257,6 @@ function requestJson(url, options = {}) {
   });
 }
 
-function ollamaTagsUrl(ollamaUrl) {
-  const parsedUrl = new URL(ollamaUrl);
-  parsedUrl.pathname = "/api/tags";
-  parsedUrl.search = "";
-  return parsedUrl.toString();
-}
-
-async function isOllamaReachable(ollamaUrl) {
-  try {
-    await requestJson(ollamaTagsUrl(ollamaUrl));
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function waitForOllama(ollamaUrl, timeoutMs = 45000) {
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < timeoutMs) {
-    if (await isOllamaReachable(ollamaUrl)) {
-      return true;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 500));
-  }
-  return false;
-}
-
-async function startOllamaServer(ollamaCommand, ollamaUrl, env) {
-  if (await isOllamaReachable(ollamaUrl)) {
-    backendLogStream?.write(`Ollama API already reachable at ${ollamaTagsUrl(ollamaUrl)}\n`);
-    return;
-  }
-
-  backendLogStream?.write(`Starting Ollama server with ${ollamaCommand}\n`);
-  try {
-    ollamaProcess = spawn(ollamaCommand, ["serve"], {
-      env,
-      stdio: ["ignore", "pipe", "pipe"],
-      windowsHide: true,
-    });
-  } catch (error) {
-    backendLogStream?.write(`Ollama failed to start: ${error.message}\n`);
-    return;
-  }
-
-  ollamaProcess.stdout.on("data", (chunk) => backendLogStream?.write(chunk));
-  ollamaProcess.stderr.on("data", (chunk) => backendLogStream?.write(chunk));
-  ollamaProcess.once("exit", (code, signal) => {
-    backendLogStream?.write(`[${new Date().toISOString()}] Ollama exited code=${code} signal=${signal}\n`);
-    ollamaProcess = null;
-  });
-
-  const ready = await waitForOllama(ollamaUrl);
-  backendLogStream?.write(`Ollama startup status: ${ready ? "ready" : "not ready before timeout"}\n`);
-}
-
 async function waitForHealth(port) {
   const healthUrl = `http://${DEFAULT_HOST}:${port}/health`;
   const startedAt = Date.now();
@@ -351,7 +293,8 @@ async function startBackend() {
   const copiedBundledModels = provisionBundledOllamaModels(ollamaModelsDir);
 
   backendPort = await findFreePort(DEFAULT_PORT);
-  const ollamaPort = await findFreePort(DEFAULT_OLLAMA_PORT);
+  const ollamaPort = await findFreePort(0);
+  const managedOllama = !process.env.HITL_OLLAMA_URL;
   const ollamaUrl = process.env.HITL_OLLAMA_URL || `http://${DEFAULT_HOST}:${ollamaPort}/api/chat`;
   const backendArgs = [
     "--host",
@@ -373,13 +316,17 @@ async function startBackend() {
     "--ollama-models-dir",
     ollamaModelsDir,
   ];
+  if (managedOllama) backendArgs.push("--managed-ollama");
   const backendCommand = bundledBackend || findPythonCommand();
   const launchArgs = bundledBackend ? backendArgs : [serverScript, ...backendArgs];
   const launchCwd = bundledBackend ? path.dirname(bundledBackend) : appRootPath();
   const backendEnv = {
     ...process.env,
-    OLLAMA_MODELS: process.env.OLLAMA_MODELS || ollamaModelsDir,
-    OLLAMA_HOST: process.env.OLLAMA_HOST || `${DEFAULT_HOST}:${ollamaPort}`,
+    OLLAMA_MODELS: managedOllama ? ollamaModelsDir : (process.env.OLLAMA_MODELS || ollamaModelsDir),
+    OLLAMA_HOST: new URL(ollamaUrl).host,
+    HITL_OLLAMA_MANAGED: managedOllama ? "1" : "0",
+    HITL_OLLAMA_URL: ollamaUrl,
+    HITL_APP_VERSION: app.getVersion(),
     PYTHONUNBUFFERED: "1",
   };
 
@@ -397,7 +344,9 @@ async function startBackend() {
     backendLogStream.write(`JAVA_HOME: ${bundledJavaHome}\n`);
   }
 
-  await startOllamaServer(ollamaCommand, ollamaUrl, backendEnv);
+  backendLogStream.write(`App version: ${app.getVersion()}\n`);
+  backendLogStream.write(`Ollama mode: ${managedOllama ? "backend-owned bundled runtime" : "explicit external endpoint"}\n`);
+  backendLogStream.write(`Ollama endpoint: ${ollamaUrl}\n`);
 
   backendLogStream.write(`[${new Date().toISOString()}] Starting HITL backend on ${backendPort}\n`);
   backendLogStream.write(`Command: ${backendCommand} ${launchArgs.join(" ")}\n`);
@@ -479,11 +428,8 @@ function stopBackend() {
     if (backendProcess && !backendProcess.killed) {
       backendProcess.kill();
     }
-    if (ollamaProcess && !ollamaProcess.killed) {
-      ollamaProcess.kill();
-    }
     backendLogStream?.end();
-  }, 1500).unref();
+  }, 6500).unref();
 }
 
 app.whenReady().then(async () => {

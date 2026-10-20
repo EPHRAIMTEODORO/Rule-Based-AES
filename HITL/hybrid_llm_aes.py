@@ -11,19 +11,22 @@ from __future__ import annotations
 
 import argparse
 import csv
+import http.client
 import json
+import logging
 import math
 import os
 import re
 import socket
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 
 THIS_DIR = Path(__file__).resolve().parent
@@ -72,8 +75,22 @@ LLM_FIELD_NAMES = [
     "justification",
 ]
 LLM_JSON_RETRIES = 2
+LLM_RECOVERY_RETRIES = 2
+LLM_RECOVERY_DELAY_SECONDS = 3.0
 DEFAULT_LLM_TIMEOUT_SECONDS = 600
 _OLLAMA_PROCESS: Optional[subprocess.Popen] = None
+_OLLAMA_OWNED_URL: Optional[str] = None
+_OLLAMA_LOCK = threading.RLock()
+_OLLAMA_STOPPING = threading.Event()
+LOGGER = logging.getLogger(__name__)
+
+
+class OllamaOwnershipError(RuntimeError):
+    """The private endpoint is no longer owned by this backend."""
+
+
+class OllamaRuntimeStopped(RuntimeError):
+    """Shutdown must not resurrect a model process from an in-flight retry."""
 
 INTEGER_TRAIT_FIELDS = [
     "organization",
@@ -206,7 +223,10 @@ def clamp_int_score(value: object, min_value: int = 1, max_value: int = 6) -> in
 def extract_json_object(text: str) -> dict:
     """Parse a JSON object, allowing for accidental text around it."""
     try:
-        return json.loads(text)
+        parsed = json.loads(text)
+        if not isinstance(parsed, dict):
+            raise ValueError("LLM response must be a JSON object.")
+        return parsed
     except json.JSONDecodeError:
         pass
 
@@ -235,9 +255,51 @@ def is_ollama_running(ollama_url: str, timeout_seconds: float = 2.0) -> bool:
 
 def start_ollama_if_needed(args: argparse.Namespace) -> None:
     """Start `ollama serve` when the configured Ollama API is not reachable."""
-    global _OLLAMA_PROCESS
+    with _OLLAMA_LOCK:
+        _start_ollama_if_needed(args)
+
+
+def managed_ollama(args: argparse.Namespace) -> bool:
+    """Only the configured desktop endpoint belongs to the desktop backend."""
+    return bool(getattr(args, "managed_ollama", False)) or (
+        os.environ.get("HITL_OLLAMA_MANAGED") == "1"
+        and args.ollama_url == os.environ.get("HITL_OLLAMA_URL")
+    )
+
+
+def _relay_ollama_output(process: subprocess.Popen) -> None:
+    """Explicit pipes preserve diagnostics when Windows starts a hidden child."""
+    if process.stdout is None:
+        return
+    try:
+        for line in process.stdout:
+            LOGGER.info("ollama[%s] %s", process.pid, line.rstrip())
+    finally:
+        process.stdout.close()
+
+
+def _start_ollama_if_needed(args: argparse.Namespace) -> None:
+    global _OLLAMA_PROCESS, _OLLAMA_OWNED_URL
+
+    if _OLLAMA_STOPPING.is_set():
+        raise OllamaRuntimeStopped("The local runtime is shutting down.")
+
+    own_endpoint = managed_ollama(args)
+    parsed_url = urllib.parse.urlparse(args.ollama_url)
+    if parsed_url.hostname not in {"127.0.0.1", "localhost", "::1"}:
+        if own_endpoint:
+            raise RuntimeError("An app-owned Ollama server must use a loopback address.")
+        if is_ollama_running(args.ollama_url):
+            return
+        raise RuntimeError("The configured external Ollama server is unavailable.")
 
     if is_ollama_running(args.ollama_url):
+        if own_endpoint and not (
+            _OLLAMA_OWNED_URL == args.ollama_url
+            and _OLLAMA_PROCESS is not None
+            and _OLLAMA_PROCESS.poll() is None
+        ):
+            raise OllamaOwnershipError("The private Ollama port is already in use. Reopen the app to choose a new port.")
         if not args.quiet:
             print("Ollama is already running.", flush=True)
         return
@@ -245,23 +307,39 @@ def start_ollama_if_needed(args: argparse.Namespace) -> None:
     if not args.quiet:
         print("Starting Ollama server...", flush=True)
 
-    parsed_url = urllib.parse.urlparse(args.ollama_url)
     ollama_env = os.environ.copy()
-    if parsed_url.hostname and "OLLAMA_HOST" not in ollama_env:
-        host = parsed_url.hostname
-        if parsed_url.port:
-            host = f"{host}:{parsed_url.port}"
-        ollama_env["OLLAMA_HOST"] = host
+    ollama_env["OLLAMA_HOST"] = parsed_url.netloc
+    if own_endpoint:
+        ollama_env["OLLAMA_NO_CLOUD"] = "1"
+        ollama_env["OLLAMA_NUM_PARALLEL"] = "1"
+
+    if _OLLAMA_PROCESS is not None and _OLLAMA_PROCESS.poll() is None:
+        if _OLLAMA_OWNED_URL != args.ollama_url:
+            raise RuntimeError("The backend already owns a different Ollama endpoint.")
+        process = _OLLAMA_PROCESS
+    else:
+        process = None
 
     try:
-        process = subprocess.Popen(
-            [args.ollama_command, "serve"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True,
-            env=ollama_env,
-        )
-        _OLLAMA_PROCESS = process
+        if process is None:
+            if _OLLAMA_STOPPING.is_set():
+                raise OllamaRuntimeStopped("The local runtime is shutting down.")
+            LOGGER.info("Starting owned Ollama: executable=%s endpoint=%s", args.ollama_command, args.ollama_url)
+            process = subprocess.Popen(
+                [args.ollama_command, "serve"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                bufsize=1,
+                env=ollama_env,
+                start_new_session=os.name != "nt",
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+            )
+            _OLLAMA_PROCESS = process
+            _OLLAMA_OWNED_URL = args.ollama_url
+            threading.Thread(target=_relay_ollama_output, args=(process,), daemon=True).start()
     except FileNotFoundError as exc:
         raise RuntimeError(
             "Could not find the Ollama command. Install Ollama or pass "
@@ -270,6 +348,8 @@ def start_ollama_if_needed(args: argparse.Namespace) -> None:
 
     deadline = time.monotonic() + args.ollama_startup_timeout
     while time.monotonic() < deadline:
+        if _OLLAMA_STOPPING.is_set():
+            raise OllamaRuntimeStopped("The local runtime is shutting down.")
         if is_ollama_running(args.ollama_url):
             if not args.quiet:
                 print("Ollama server is ready.", flush=True)
@@ -287,14 +367,29 @@ def start_ollama_if_needed(args: argparse.Namespace) -> None:
 
 def stop_ollama_if_started(timeout_seconds: float = 5.0) -> None:
     """Stop the Ollama server process if this scorer started it."""
-    global _OLLAMA_PROCESS
+    _OLLAMA_STOPPING.set()
+    with _OLLAMA_LOCK:
+        _stop_ollama_if_started(timeout_seconds)
+
+
+def _stop_ollama_if_started(timeout_seconds: float) -> None:
+    global _OLLAMA_PROCESS, _OLLAMA_OWNED_URL
 
     process = _OLLAMA_PROCESS
     if process is None or process.poll() is not None:
         _OLLAMA_PROCESS = None
+        _OLLAMA_OWNED_URL = None
         return
 
-    process.terminate()
+    if os.name == "nt":
+        subprocess.run(
+            ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+            capture_output=True,
+            timeout=timeout_seconds,
+            creationflags=subprocess.CREATE_NO_WINDOW,
+        )
+    else:
+        process.terminate()
     try:
         process.wait(timeout=timeout_seconds)
     except subprocess.TimeoutExpired:
@@ -302,6 +397,17 @@ def stop_ollama_if_started(timeout_seconds: float = 5.0) -> None:
         process.wait(timeout=timeout_seconds)
     finally:
         _OLLAMA_PROCESS = None
+        _OLLAMA_OWNED_URL = None
+
+
+def recover_ollama(args: argparse.Namespace, remaining_seconds: float) -> None:
+    """Restart only a local server owned by this backend; never stop another service."""
+    if _OLLAMA_STOPPING.is_set():
+        raise OllamaRuntimeStopped("The local runtime is shutting down.")
+    if managed_ollama(args) or _OLLAMA_OWNED_URL == args.ollama_url:
+        recovery_args = argparse.Namespace(**vars(args))
+        recovery_args.ollama_startup_timeout = min(args.ollama_startup_timeout, remaining_seconds)
+        start_ollama_if_needed(recovery_args)
 
 
 def call_ollama_chat(
@@ -311,6 +417,9 @@ def call_ollama_chat(
     ollama_url: str,
     temperature: float,
     timeout_seconds: int,
+    recovery_callback: Optional[Callable[[float], None]] = None,
+    progress_callback: Optional[Callable[[dict], None]] = None,
+    num_predict: Optional[int] = None,
 ) -> dict:
     """Call Ollama's local chat API and return the parsed JSON response."""
     payload = {
@@ -325,10 +434,18 @@ def call_ollama_chat(
             "temperature": temperature,
         },
     }
+    if num_predict is not None:
+        payload["options"]["num_predict"] = num_predict
     data = json.dumps(payload).encode("utf-8")
 
     last_json_error: Optional[Exception] = None
-    for attempt in range(LLM_JSON_RETRIES + 1):
+    json_failures = 0
+    recoveries = 0
+    deadline = time.monotonic() + timeout_seconds
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise RuntimeError(f"The local model timed out after {timeout_seconds} seconds while scoring this essay.")
         request = urllib.request.Request(
             ollama_url,
             data=data,
@@ -336,16 +453,20 @@ def call_ollama_chat(
             method="POST",
         )
 
+        interruption = None
         try:
-            with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+            with urllib.request.urlopen(request, timeout=remaining) as response:
                 response_payload = json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             error_body = exc.read().decode("utf-8", errors="replace")
-            raise RuntimeError(
-                "Ollama returned an HTTP error. Make sure the model name matches "
-                f"`ollama list`. Requested model: {model}. "
-                f"HTTP {exc.code}: {error_body}"
-            ) from exc
+            LOGGER.warning("Ollama HTTP %s: %s", exc.code, error_body)
+            if exc.code == 404:
+                raise RuntimeError(f"Ollama could not find the requested model or endpoint (HTTP 404). Model: {model}. {error_body}") from exc
+            runner_markers = ("runner", "llama-server", "wsarecv", "read tcp", "forcibly closed", "connection reset", "unexpected eof", "broken pipe")
+            if exc.code in {502, 503} or (exc.code == 500 and any(marker in error_body.lower() for marker in runner_markers)):
+                interruption = exc
+            else:
+                raise RuntimeError(f"Ollama rejected the scoring request (HTTP {exc.code}). {error_body}") from exc
         except urllib.error.URLError as exc:
             if isinstance(exc.reason, (TimeoutError, socket.timeout)) or "timed out" in str(exc.reason).lower():
                 raise RuntimeError(
@@ -353,10 +474,9 @@ def call_ollama_chat(
                     f"this essay. The computer may be under heavy load; wait for the current "
                     "job to finish before starting other intensive programs."
                 ) from exc
-            raise RuntimeError(
-                "Could not reach Ollama. Make sure Ollama is running and the model is "
-                f"available with: ollama run {model}"
-            ) from exc
+            interruption = exc
+        except (ConnectionError, http.client.RemoteDisconnected, http.client.IncompleteRead) as exc:
+            interruption = exc
         except (TimeoutError, socket.timeout) as exc:
             raise RuntimeError(
                 f"The local model timed out after {timeout_seconds} seconds while scoring "
@@ -364,19 +484,48 @@ def call_ollama_chat(
                 "job to finish before starting other intensive programs."
             ) from exc
 
-        content = response_payload.get("message", {}).get("content", "")
-        if not content:
-            last_json_error = ValueError(f"Ollama returned no message content: {response_payload}")
+        except json.JSONDecodeError as exc:
+            response_payload = None
+            last_json_error = exc
+
+        if interruption is not None:
+            if recoveries >= LLM_RECOVERY_RETRIES:
+                raise RuntimeError(
+                    f"The local model was interrupted and could not recover after {recoveries} retries. "
+                    "An Ollama update or another program may have stopped its runner. "
+                    "Wait for that operation to finish, then retry the workbook."
+                ) from interruption
+            recoveries += 1
+            LOGGER.warning("Ollama interrupted; recovery %s/%s: %s", recoveries, LLM_RECOVERY_RETRIES, interruption)
+            if progress_callback:
+                progress_callback({"stage": "recovering", "message": f"Local model interrupted. Recovering and retrying this essay ({recoveries}/{LLM_RECOVERY_RETRIES})."})
+            remaining = deadline - time.monotonic()
+            if remaining <= LLM_RECOVERY_DELAY_SECONDS:
+                raise RuntimeError(f"The local model timed out after {timeout_seconds} seconds during recovery.") from interruption
+            time.sleep(LLM_RECOVERY_DELAY_SECONDS)
+            if recovery_callback:
+                try:
+                    recovery_callback(max(0.0, deadline - time.monotonic()))
+                except (OllamaOwnershipError, OllamaRuntimeStopped):
+                    raise
+                except RuntimeError as recovery_error:
+                    LOGGER.warning("Ollama server recovery is not ready: %s", recovery_error)
+            continue
+
+        message = response_payload.get("message") if isinstance(response_payload, dict) else None
+        content = message.get("content") if isinstance(message, dict) else None
+        if not isinstance(content, str) or not content.strip():
+            last_json_error = ValueError("Ollama returned no valid message content.")
         else:
             try:
                 return extract_json_object(content)
             except ValueError as exc:
                 last_json_error = exc
 
-        if attempt < LLM_JSON_RETRIES:
-            time.sleep(0.5)
-
-    raise ValueError(f"Ollama did not return valid rubric JSON after retries: {last_json_error}")
+        if json_failures >= LLM_JSON_RETRIES:
+            raise ValueError(f"Ollama did not return valid rubric JSON after retries: {last_json_error}")
+        json_failures += 1
+        time.sleep(min(0.5, max(0, deadline - time.monotonic())))
 
 
 def normalize_llm_result(raw_result: dict, essay_id: str) -> dict:
@@ -510,7 +659,10 @@ def write_csv_rows(output_path: str, fieldnames: list[str], rows: list[dict]) ->
         writer.writerows(rows)
 
 
-def evaluate_row(row: dict, args: argparse.Namespace, essay_index: int, text_column: str) -> dict:
+def evaluate_row(
+    row: dict, args: argparse.Namespace, essay_index: int, text_column: str,
+    progress_callback: Optional[Callable[[dict], None]] = None,
+) -> dict:
     """Evaluate one essay with rule-based features and LLM features."""
     from aes_feature_extractor import evaluate_essay
 
@@ -520,6 +672,11 @@ def evaluate_row(row: dict, args: argparse.Namespace, essay_index: int, text_col
     paragraph_total = paragraph_count(essay_text)
 
     aes_result = evaluate_essay(essay_text)
+    if aes_result["features"].get("grammar_errors_per_100") is None and progress_callback:
+        progress_callback({
+            "stage": "scoring",
+            "message": "Grammar checking is unavailable for this essay. Scoring with the remaining evidence.",
+        })
     llm_prompt = build_user_prompt(
         essay_id=essay_id,
         prompt_id=prompt_id,
@@ -533,6 +690,8 @@ def evaluate_row(row: dict, args: argparse.Namespace, essay_index: int, text_col
         ollama_url=args.ollama_url,
         temperature=args.temperature,
         timeout_seconds=args.timeout,
+        recovery_callback=lambda remaining: recover_ollama(args, remaining),
+        progress_callback=progress_callback,
     )
     llm_result = normalize_llm_result(raw_llm_result, essay_id)
     aes_row = flatten_aes_result(aes_result, paragraph_total, essay_text)

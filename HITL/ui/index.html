@@ -1154,10 +1154,13 @@
 
       <section class="panel readiness-panel" aria-label="Readiness">
         <div class="panel-heading">
-          <h2>Readiness</h2>
+          <h2>Availability</h2>
           <span id="readiness-summary" class="muted">Checking</span>
         </div>
         <div id="readiness-list" class="readiness-list"></div>
+        <p class="muted" id="runtime-summary"></p>
+        <button id="test-scoring-button" type="button">Test Scoring</button>
+        <p class="muted" id="inference-status">Scoring has not been tested this session.</p>
       </section>
     </section>
 
@@ -1451,6 +1454,7 @@
       }
 
       function setBusy(isBusy) {
+        document.getElementById("test-scoring-button").disabled = isBusy;
         startButton.disabled = isBusy;
         sampleButton.disabled = isBusy;
         loadReviewButton.disabled = isBusy;
@@ -1982,8 +1986,11 @@
       function renderPreflight(result) {
         const summary = result.summary || {};
         readinessSummary.textContent = result.ready
-          ? `Ready ${summary.passed || 0}/${summary.total || 0}`
+          ? `Available ${summary.passed || 0}/${summary.total || 0}`
           : `Needs setup ${summary.passed || 0}/${summary.total || 0}`;
+        const runtime = result.runtime || {};
+        document.getElementById("runtime-summary").textContent =
+          `App ${runtime.app_version || "unknown"} · ${runtime.mode === "app-owned" ? "Bundled" : "External"} Ollama ${runtime.ollama_version || "unavailable"}`;
         readinessList.replaceChildren();
 
         (result.checks || []).forEach((check) => {
@@ -2028,6 +2035,20 @@
           copy.append(title, detail);
           row.append(icon, copy);
           readinessList.appendChild(row);
+        }
+      }
+
+      async function testScoring() {
+        const status = document.getElementById("inference-status");
+        setBusy(true);
+        status.textContent = "Testing local model execution…";
+        try {
+          await requestJson(`${apiBase}/inference-check`, { method: "POST" });
+          status.textContent = "Local model answered successfully.";
+        } catch (error) {
+          status.textContent = `Scoring test failed: ${error.message}`;
+        } finally {
+          setBusy(false);
         }
       }
 
@@ -2266,6 +2287,7 @@
       form.addEventListener("submit", startUploadJob);
       reviewUploadForm.addEventListener("submit", loadReviewWorkbook);
       sampleButton.addEventListener("click", startSampleJob);
+      document.getElementById("test-scoring-button").addEventListener("click", testScoring);
       acceptSystemButton.addEventListener("click", acceptSystemDecision);
       saveDecisionButton.addEventListener("click", saveDecision);
       finalScoreControl.addEventListener("change", () => {

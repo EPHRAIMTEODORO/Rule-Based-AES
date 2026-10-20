@@ -135,12 +135,12 @@ For the complete platform checklists, see:
 
 ## Windows Installer Handoff
 
-The Windows handoff bundle is written to the ignored `dist/installer-files/`
+The Windows handoff bundle is written to the ignored `dist/release-0.1.3/installer-files/`
 folder. Keep these three files together when sending the installer to a tester:
 
 ```text
 7za.exe
-HITL Academic Writing Scorer Setup 0.1.1.exe
+HITL Academic Writing Scorer Setup 0.1.3.exe
 hitl-app.7z
 ```
 
@@ -154,3 +154,17 @@ shortcuts. Per-user data under `%APPDATA%` is preserved.
 
 Generated installers, runtime copies, model files, and build outputs are
 intentionally ignored by git and are not part of source commits.
+
+## Recovery And Runtime Diagnostics
+
+In 0.1.3 the backend starts and owns the bundled Ollama server on a private
+endpoint selected by Electron. It can recover an interrupted runner or server
+with two bounded retries of the current essay. A separately installed Ollama
+service is not stopped or restarted. Explicit `HITL_OLLAMA_URL` configuration
+continues to select an external endpoint.
+
+`GET /preflight` reports availability plus actual endpoint/version information.
+`POST /inference-check` (the setup panel's Test Scoring button) tests generation
+and rejects requests while workbook processing is active. The normal rubric
+and scoring options are unchanged. Detailed failures and recovery attempts are
+captured in the app-data `logs/hitl-backend.log` file.

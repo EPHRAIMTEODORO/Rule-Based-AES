@@ -440,6 +440,12 @@ def process_workbook(
     output_rows = []
     total = len(rows_to_process)
     for essay_index, row in enumerate(rows_to_process, start=1):
+        def essay_progress(event: dict) -> None:
+            _emit_progress(progress_callback, **{
+                **event, "current": essay_index, "total": total,
+                "rows_processed": len(output_rows),
+            })
+
         _emit_progress(
             progress_callback,
             stage="scoring",
@@ -452,7 +458,10 @@ def process_workbook(
         )
         output_rows.append(
             _with_initial_decision_fields(
-                scorer.evaluate_row(row, scorer_args, essay_index, selected_text_column),
+                scorer.evaluate_row(
+                    row, scorer_args, essay_index, selected_text_column,
+                    progress_callback=essay_progress,
+                ),
                 pending=True,
             )
         )

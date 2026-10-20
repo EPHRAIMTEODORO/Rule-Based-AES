@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import copy
 import json
+import logging
 import math
 import re
 import threading
@@ -211,6 +212,7 @@ def _run_job(job_id: str, processor_kwargs: dict) -> None:
             progress_callback=_progress_callback(job_id),
         )
     except Exception as exc:
+        logging.getLogger(__name__).exception("HITL job %s failed", job_id)
         _set_job_state(
             job_id,
             status="failed",

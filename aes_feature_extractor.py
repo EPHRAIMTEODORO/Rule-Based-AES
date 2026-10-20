@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import logging
 import multiprocessing
 import os
 import queue
@@ -300,6 +301,9 @@ def _grammar_errors_per_100(text: str, word_count: int) -> Optional[float]:
             match_ids = _check_grammar_with_cli(text)
 
     if match_ids is None:
+        logging.getLogger(__name__).warning(
+            "Grammar checking is unavailable; excluding the grammar component from the AES score."
+        )
         return None
 
     return safe_divide(len(match_ids) * 100, word_count)
@@ -377,8 +381,10 @@ def _check_grammar_with_cli(text: str) -> Optional[list[str]]:
             except OSError:
                 pass
 
+    if result.returncode != 0 or not isinstance(result.stdout, str):
+        return None
     json_start = result.stdout.find("{")
-    if result.returncode != 0 or json_start == -1:
+    if json_start == -1:
         return None
 
     try:
@@ -386,15 +392,18 @@ def _check_grammar_with_cli(text: str) -> Optional[list[str]]:
     except json.JSONDecodeError:
         return None
 
+    if not isinstance(payload, dict):
+        return None
     matches = payload.get("matches")
     if not isinstance(matches, list):
         return None
-
-    return [
-        str(match.get("rule", {}).get("id", ""))
-        for match in matches
-        if isinstance(match, dict)
-    ]
+    match_ids = []
+    for match in matches:
+        rule = match.get("rule") if isinstance(match, dict) else None
+        if not isinstance(rule, dict) or not isinstance(rule.get("id"), str):
+            return None
+        match_ids.append(rule["id"])
+    return match_ids
 
 
 def _grammar_check_worker(text: str, result_queue: multiprocessing.Queue) -> None:

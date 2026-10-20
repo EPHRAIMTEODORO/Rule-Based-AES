@@ -1,7 +1,7 @@
 # Windows Handoff For HITL Desktop Packaging
 
-The next Windows release is **0.1.2**. It includes the LanguageTool path fix,
-the missing-grammar-score handling fix, and the bundled-model packaging change.
+The next Windows release is **0.1.3**. It adds guarded LanguageTool output parsing, bounded local-model recovery,
+backend-owned Ollama lifecycle, runtime provenance, and an explicit inference test.
 
 This handoff is for building and testing the HITL Academic Writing Scorer
 desktop app on Windows. For the Mac build planned on the other laptop, use
@@ -115,11 +115,11 @@ HITL/desktop/dist/
 ```
 
 The tested offline Windows handoff is a three-file bundle in the ignored
-`HITL/desktop/dist/installer-files/` folder:
+`HITL/desktop/dist/release-0.1.3/installer-files/` folder:
 
 ```text
 7za.exe
-HITL Academic Writing Scorer Setup 0.1.2.exe
+HITL Academic Writing Scorer Setup 0.1.3.exe
 hitl-app.7z
 ```
 
@@ -219,9 +219,9 @@ Create the Windows installable:
 npm run dist:win
 ```
 
-The package version in `HITL\desktop\package.json` should report `0.1.2`
+The package version in `HITL\desktop\package.json` should report `0.1.3`
 before building. If an older `dist` folder is present, keep the generated
-0.1.2 files together and do not mix them with an older installer bundle.
+0.1.3 files together and do not mix them with an older installer bundle.
 
 Expected output:
 
@@ -233,7 +233,7 @@ The Electron build produces the application payload. The handoff wrapper is
 assembled from that payload and written as:
 
 ```text
-HITL\desktop\dist\installer-files\HITL Academic Writing Scorer Setup 0.1.2.exe
+HITL\desktop\dist\release-0.1.3\installer-files\HITL Academic Writing Scorer Setup 0.1.3.exe
 ```
 
 ## Verification Checklist
@@ -267,3 +267,90 @@ Before calling the Windows build ready:
   into app data.
 - The generated installer may be unsigned. Windows SmartScreen warnings are
   expected until proper code signing is configured.
+
+## Runtime Recovery In 0.1.3
+
+The Electron launcher selects a fresh private Ollama port and passes
+`--managed-ollama` to the backend. The backend owns the bundled server and can
+restart it if interrupted; it never kills a separately installed Ollama service.
+An explicit `HITL_OLLAMA_URL` selects an external endpoint instead.
+
+Interrupted generation has at most two recovery attempts within the existing
+per-essay timeout. Only the current essay is retried, preserving completed rows
+in the current job. Missing-model and rejected-request errors are not retried
+as runner interruptions. Full failure tracebacks are written to the backend log.
+
+LanguageTool checks reject missing, failed, and malformed subprocess output
+before parsing. When both grammar methods fail, the grammar metric remains
+unavailable and is excluded from the weighted score. It is not treated as zero
+errors.
+
+The setup panel labels the existing checks as Availability. `Test Scoring`
+performs a deliberate local inference request, separately from `/preflight`,
+and is unavailable during workbook processing. The panel also identifies the
+app version and whether the active Ollama endpoint is managed or external.
+
+Windows Ollama auto-updates can kill every `ollama.exe`/`llama-server.exe`
+process by executable name, including bundled copies in other directories.
+Private ports alone do not prevent this. Recovery tests must terminate only
+isolated test PIDs, never every process with those names.
+
+Release-specific build configuration, checksums, and verification results are
+kept in the ignored `HITL/desktop/dist/release-0.1.3/` directory. The Windows
+handoff uses Electron's directory target and the existing three-file setup
+wrapper, avoiding the standalone NSIS payload-size limit. The release config
+includes the complete model blob and omits redundant model chunks.
+
+## Local 0.1.3 Verification (2026-10-16)
+
+- All 37 unit/API regression tests passed.
+- The frozen Windows backend processed all 30 rows of
+  `Essays_system_check.xlsx`, preserving student order and valid rubric scores.
+- An isolated runner termination during essay 2 and an isolated server/runner
+  termination during essay 3 both recovered automatically. Progress retained
+  the one and two already completed rows respectively.
+- Grammar metrics were available for 28 rows. The other two rows completed
+  with grammar unavailable, without the `.find()` exception.
+- Saving a human decision, downloading the completed workbook, reopening all
+  30 rows, and graceful backend shutdown passed.
+- The three-file installer archive passed its integrity check and its SHA-256
+  checksums are saved in the release directory.
+- Upgrading this laptop to 0.1.3 preserved all 25 original model/runtime files
+  byte for byte. The installed backend passed availability 20/20 and a real
+  inference probe using its bundled Ollama 0.33.2 on a private endpoint.
+- Installed application/backend hashes match the tested release; Desktop and
+  Start Menu shortcuts point to the upgraded installation.
+
+The visual check was completed on 2026-10-17 after Windows was unlocked. The
+installed app shows version 0.1.3, availability 20/20, successful Test Scoring,
+and all 30 review rows with the saved first-row final score 4 / EIL 1.
+
+That check found an additional UI bug: `numericValue()` converts empty
+strings and null values to zero. Unavailable grammar is therefore labelled
+Clean, and a blank pending final score is displayed as 1 with a Finalized
+preview. The stored record remains blank and Pending until a decision is
+saved. These display cases still need correction; the focused installed-UI
+checks in `verification-2026-10-17/ui-missing-value-tests.json` reproduce them.
+
+A clean account/VM installation and physically disconnected network test remain
+unverified. The frozen integration test used unreachable HTTP/HTTPS proxies
+with loopback exceptions and cloud disabled.
+
+During this run Windows temporarily stopped enumerating the NVIDIA GPU and
+execution paused for approximately 31 minutes. The runner recovery completed
+on CPU; the server recovery rediscovered the restored NVIDIA GPU. These
+observations and the successful final report are retained under the release's
+`verification/` folder.
+
+## Installed-Binary Retest (2026-10-17)
+
+All 37 unit/API tests passed again. A fresh isolated run using the installed
+0.1.3 binaries completed all 30 essays in approximately 13 minutes 38 seconds.
+Both deliberate runner/server interruptions recovered, 28 rows had grammar
+metrics, and the two unavailable-grammar rows completed safely. Saving a human
+decision, download/reopening, and graceful shutdown passed again. A fresh
+visible Test Scoring check also succeeded in the installed Electron app.
+
+Results are in `dist/release-0.1.3/verification-2026-10-17/TEST_RESULTS.md`.
+The two additional missing-value UI checks fail as documented above; these
+findings do not change the successful original crash-recovery results.
