@@ -1,5 +1,12 @@
 # Current Work Summary
 
+> Historical development summary. For the inspected October 19, 2026 working
+> tree, including the Electron HITL desktop, use the
+> [documentation index](docs/README.md),
+> [technical reference](docs/TECHNICAL_REFERENCE.md), and
+> [validation report](docs/VALIDATION_REPORT.md). The metrics below concern a
+> saved 41-essay experiment, not a fresh evaluation of the current desktop.
+
 This repo contains a rule-based Automated Essay Scoring (AES) feature extractor
 and a separate hybrid LLM AES workflow that uses local Llama 3 through Ollama.
 

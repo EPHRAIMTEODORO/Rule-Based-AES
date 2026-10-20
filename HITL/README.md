@@ -6,10 +6,17 @@ extractor with local Llama 3 rubric judgments and emits columns that can be
 pasted or imported into the `01_Raw_Inputs` sheet of the HITL academic writing
 template.
 
-The original `aes_feature_extractor.py` is not modified. The HITL script imports
-it, adds LLM-based rubric features, adds the missing template lexical fields,
+The HITL script imports the shared `aes_feature_extractor.py`, adds LLM-based
+rubric features, adds the template lexical fields,
 and writes a new CSV with both the original hybrid columns and workbook-ready
 aliases.
+
+For a complete explanation of the current desktop architecture and scoring
+criteria, see the [technical reference](../docs/TECHNICAL_REFERENCE.md). For
+research presentation notes and verified experiment results, use the
+[presentation guide](../docs/PRESENTATION_GUIDE.md) and
+[validation report](../docs/VALIDATION_REPORT.md). The desktop's model grade is
+the LLM recommendation; learned Ridge fusion remains a separate research path.
 
 For the desktop app, use `app_backend.py`. It exposes an app-facing job API:
 `start_job(...)`, `get_job_status(...)`, and `get_job_result(...)`. Under the

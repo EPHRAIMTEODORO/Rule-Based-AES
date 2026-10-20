@@ -1,4 +1,28 @@
-# Rule-Based AES Feature Extractor
+# Automated Essay Scoring and HITL Desktop
+
+This repository contains a rule-based essay feature extractor, local Llama 3
+rubric scoring, an Electron human-in-the-loop (HITL) desktop application, and
+separate research experiments. The desktop presents measurable language
+features alongside AI rubric judgments; a human rater makes the final decision.
+
+## Repository and Research Documentation
+
+- [Documentation index](docs/README.md): reading order and scope.
+- [Technical reference](docs/TECHNICAL_REFERENCE.md): architecture, components,
+  scoring formulas, rubric, indicators, data contracts, runtime, and limitations.
+- [Presentation guide](docs/PRESENTATION_GUIDE.md): speaker notes, a worked
+  example, demonstration sequence, and research defense questions.
+- [Validation report](docs/VALIDATION_REPORT.md): reproduced results, dataset
+  scope, evaluation conventions, and verification evidence.
+
+These documents describe the inspected working tree on October 19, 2026,
+including the desktop source version 0.1.3. Existing experimental outputs were
+evaluated again; their scores were not regenerated with the current model prompt.
+
+The sections below document the original standalone feature extractor. For the
+desktop application, start with [HITL/README.md](HITL/README.md).
+
+## Standalone Rule-Based AES Feature Extractor
 
 This project provides a clean Python implementation of a rule-based Automated
 Essay Scoring feature extractor. It extracts interpretable essay features and
